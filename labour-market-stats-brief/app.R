@@ -499,12 +499,12 @@ ui <- fluidPage(
                                                  textInput("ref_month_input", label = NULL,
                                                            placeholder = "e.g. March 2026", width = "320px")
                                              ),
-                                             div(class = "govuk-form-group",
-                                                 tags$label(class = "govuk-label", style = "font-weight:700;",
-                                                            "OFFICIAL-SENSITIVE \u2013 Internal Briefing \u2013 For external lines please contact"),
+                                             div(class = "govuk-form-group", style = "display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;",
+                                                 span(style = "font-size: 14px; white-space: nowrap;",
+                                                      "OFFICIAL-SENSITIVE \u2013 Internal Briefing \u2013 For external lines please contact"),
                                                  textInput("contact_names", label = NULL,
                                                            value = "",
-                                                           placeholder = "e.g. John Smith and Jane Doe", width = "420px")
+                                                           placeholder = "e.g. John Smith and Jane Doe", width = "280px")
                                              ),
 
                                              tags$hr(class = "govuk-section-break"),
@@ -519,6 +519,7 @@ ui <- fluidPage(
 
                                              # --- File status (all 9 types) ---
                                              uiOutput("upload_status"),
+                                             uiOutput("download_all_btn"),
 
                                              tags$hr(class = "govuk-section-break"),
                                              
@@ -564,12 +565,12 @@ ui <- fluidPage(
                                                  div(class = "govuk-hint", "Auto-detected from database. Edit to override."),
                                                  uiOutput("month_status")
                                              ),
-                                             div(class = "govuk-form-group",
-                                                 tags$label(class = "govuk-label", style = "font-weight:700;",
-                                                            "OFFICIAL-SENSITIVE \u2013 Internal Briefing \u2013 For external lines please contact"),
+                                             div(class = "govuk-form-group", style = "display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;",
+                                                 span(style = "font-size: 14px; white-space: nowrap;",
+                                                      "OFFICIAL-SENSITIVE \u2013 Internal Briefing \u2013 For external lines please contact"),
                                                  textInput("auto_contact_names", label = NULL,
                                                            value = "",
-                                                           placeholder = "e.g. John Smith and Jane Doe", width = "420px")
+                                                           placeholder = "e.g. John Smith and Jane Doe", width = "280px")
                                              ),
 
                                              tags$hr(class = "govuk-section-break"),
@@ -920,6 +921,19 @@ server <- function(input, output, session) {
     div(style = "margin-top: 10px;", tagList(file_tags), hint_line, month_line)
   })
   
+  # "Download All" button — opens all ONS file links in new tabs
+  output$download_all_btn <- renderUI({
+    urls <- ons_download_urls()
+    # Only include ONS file URLs (not OECD API links)
+    ons_keys <- c("A01", "HR1", "X09", "RTISA", "CLA01", "X02")
+    js_opens <- paste(vapply(ons_keys, function(k) {
+      if (k %in% names(urls)) paste0("window.open('", urls[[k]], "','_blank');") else ""
+    }, character(1)), collapse = " ")
+    tags$button(class = "govuk-button govuk-button--secondary", style = "margin-top: 8px;",
+                onclick = js_opens,
+                "Download All ONS Files")
+  })
+
   # Detect vacancies periods from A01 and populate manual dropdown
   observeEvent(uploaded_files$a01, {
     path <- uploaded_files$a01
@@ -2305,7 +2319,8 @@ server <- function(input, output, session) {
     if (is.null(summ)) {
       return(p(class = "govuk-body", "Click 'Summary' to generate the narrative."))
     }
-    items <- lapply(1:10, function(i) {
+    show_lines <- setdiff(1:10, c(3, 6, 7))
+    items <- lapply(show_lines, function(i) {
       txt <- summ[[paste0("line", i)]]
       if (is.null(txt) || txt == "") txt <- "(Data not available)"
       tags$li(txt)
