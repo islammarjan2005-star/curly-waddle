@@ -866,7 +866,7 @@ server <- function(input, output, session) {
 
     list(
       A01   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/summaryoflabourmarketstatistics/current/a01", mm, ".xls"),
-      HR1   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/hr1potentialredundancies/", full_month, "/hr1", full_month, ".xlsx"),
+      HR1   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/hr1potentialredundancies/", full_month, "/hr1", mm, ".xlsx"),
       X09   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/x09realaverageweeklyearningsusingconsumerpriceinflationseasonallyadjusted/", full_month, "/x09", mm, ".xlsx"),
       RTISA = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/realtimeinformationstatisticsreferencetableseasonallyadjusted/current/rtisa", mm, ".xlsx"),
       CLA01 = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peoplenotinwork/outofworkbenefits/datasets/claimantcountcla01/current/cla01", mm, ".xlsx"),
