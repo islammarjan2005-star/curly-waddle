@@ -1,0 +1,28 @@
+A01 is ok
+HR1 is https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/hr1potentialredundancies/march2026/hr1march2026.xlsx
+
+RTISA is https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/realtimeinformationstatisticsreferencetableseasonallyadjusted/current/rtisamar2026.xlsx
+
+X09 is https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/x09realaverageweeklyearningsusingconsumerpriceinflationseasonallyadjusted/march2026/x09mar2026.xlsx
+
+CLA01 you got right
+
+X02 is https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/labourforcesurveyflowsestimatesx02/current/x02feb2026.xls
+
+OECD UE is https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.UNE_LF.PT_LF_SUB..Y._T.Y_GE15..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels
+
+OECD INACT is https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.OLF_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels
+
+OECD EMP is https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.EMP_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2018-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels
+
+
+Please can you actually add the placeholder to the OFFICIAL SENSETIVE header/footer of the docx. currently doesn't work or have a placeholder. and also just format it like a sentence on the app to fill the blank in like 
+
+OFFICIAL-SENSITIVE – Internal Briefing – For external lines please contact ____________
+
+make sure you make it clear you can click on the grey buttons for links, remove the textal unembedded links from the app. like just a sentence saying click button to download data for M YYYY
+
+make the fefault inputted month year on manual whatever is currently auto detected in automatic
+
+
+ALSO WHEN YOU TRIED TO CHANGE RESPONSIVENESS, REVERT YOUR OVERCORRECTION, YOU ONLY WANT VACANCIES AND PAYROLL TOGGLES TO AFFECT THINGS IN THE DASHBOARD NO LINES AFFECTED, NEITHER SUMMARY NOR TOP TEN STATS
