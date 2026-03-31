@@ -925,7 +925,7 @@ server <- function(input, output, session) {
   output$download_all_btn <- renderUI({
     urls <- ons_download_urls()
     # Only include ONS file URLs (not OECD API links)
-    ons_keys <- c("A01", "HR1", "X09", "RTISA", "CLA01", "X02")
+    ons_keys <- c("A01", "HR1", "X09", "RTISA", "CLA01", "X02", "OECD_UE", "OECD_INACT", "OECD_EMP")
     js_opens <- paste(vapply(ons_keys, function(k) {
       if (k %in% names(urls)) paste0("window.open('", urls[[k]], "','_blank');") else ""
     }, character(1)), collapse = " ")
