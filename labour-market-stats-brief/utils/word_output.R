@@ -240,6 +240,7 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
                                  vacancies_mode_override = NULL,
                                  payroll_mode_override = NULL,
                                  vac_payroll_mode_override = NULL,
+                                 contact_names = NULL,
                                  verbose = TRUE) {
 
   source(config_path, local = FALSE)
@@ -288,6 +289,11 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
   if (!is.null(saved_vac_label)) vacancies_period_short_label <<- saved_vac_label
 
   doc <- read_docx(template_path)
+
+  # Replace contact names in header
+  contact <- if (!is.null(contact_names) && nzchar(contact_names)) contact_names else "Zaynah Asad and Jevan Reynolds"
+  doc <- replace_all(doc, "Zaynah Asad and Jevan Reynolds", contact)
+  doc <- replace_all(doc, "qvzcontact", contact)
 
   # header placeholders (qvz convention for ManualDB.docx)
   title_label <- if (exists("manual_month", inherits = TRUE)) manual_month_to_label(manual_month) else ""

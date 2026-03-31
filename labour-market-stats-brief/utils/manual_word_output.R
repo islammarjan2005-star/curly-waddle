@@ -283,6 +283,7 @@ generate_manual_word_output <- function(
     top_ten_override = NULL,
     template_path = "utils/ManualDB.docx",
     output_path   = "utils/ManualDBoutput.docx",
+    contact_names = NULL,
     verbose = TRUE
 ) {
   
@@ -311,6 +312,11 @@ generate_manual_word_output <- function(
   }
 
   doc <- read_docx(template_path)
+
+  # Replace contact names in header
+  contact <- if (!is.null(contact_names) && nzchar(contact_names)) contact_names else "Zaynah Asad and Jevan Reynolds"
+  doc <- replace_all(doc, "Zaynah Asad and Jevan Reynolds", contact)
+  doc <- replace_all(doc, "qvzcontact", contact)
 
   doc <- replace_all(doc, "qvzmonthlabel", manual_month_to_label(manual_month))
   doc <- replace_all(doc, "qvzrenderdate", format(Sys.Date(), "%d %B %Y"))
