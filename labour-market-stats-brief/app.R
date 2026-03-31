@@ -624,7 +624,7 @@ server <- function(input, output, session) {
   excel_script_path <- "sheets/excel_audit_workbook.R"
   summary_path      <- "sheets/summary.R"
   top_ten_path      <- "sheets/top_ten_stats.R"
-  template_path     <- "utils/DB.docx"
+  template_path     <- "utils/ManualDB.docx"
   
   # helper: check if A01 (minimum required) has been uploaded
   has_uploads <- function() {
