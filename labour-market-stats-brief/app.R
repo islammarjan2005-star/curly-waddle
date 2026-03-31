@@ -500,19 +500,12 @@ ui <- fluidPage(
                                                            placeholder = "e.g. March 2026", width = "320px")
                                              ),
                                              div(class = "govuk-form-group",
-                                                 tags$label(class = "govuk-label", style = "font-weight:700;", "Contact names (briefing header)"),
-                                                 div(class = "govuk-hint", "Names shown in the OFFICIAL-SENSITIVE header line."),
+                                                 tags$label(class = "govuk-label", style = "font-weight:700;",
+                                                            "OFFICIAL-SENSITIVE \u2013 Internal Briefing \u2013 For external lines please contact"),
                                                  textInput("contact_names", label = NULL,
-                                                           value = "Zaynah Asad and Jevan Reynolds",
+                                                           value = "",
                                                            placeholder = "e.g. John Smith and Jane Doe", width = "420px")
                                              ),
-
-                                             tags$hr(class = "govuk-section-break"),
-
-                                             # --- ONS Download links ---
-                                             h2(class = "govuk-heading-m", "Download ONS files"),
-                                             div(class = "govuk-hint", "Click a link to download the file from ONS for the reference month above."),
-                                             uiOutput("ons_download_links"),
 
                                              tags$hr(class = "govuk-section-break"),
 
@@ -572,10 +565,10 @@ ui <- fluidPage(
                                                  uiOutput("month_status")
                                              ),
                                              div(class = "govuk-form-group",
-                                                 tags$label(class = "govuk-label", style = "font-weight:700;", "Contact names (briefing header)"),
-                                                 div(class = "govuk-hint", "Names shown in the OFFICIAL-SENSITIVE header line."),
+                                                 tags$label(class = "govuk-label", style = "font-weight:700;",
+                                                            "OFFICIAL-SENSITIVE \u2013 Internal Briefing \u2013 For external lines please contact"),
                                                  textInput("auto_contact_names", label = NULL,
-                                                           value = "Zaynah Asad and Jevan Reynolds",
+                                                           value = "",
                                                            placeholder = "e.g. John Smith and Jane Doe", width = "420px")
                                              ),
 
@@ -855,14 +848,31 @@ server <- function(input, output, session) {
     yr   <- substr(mm, 4, nchar(mm))
     month_map <- c(jan="january",feb="february",mar="march",apr="april",may="may",jun="june",
                    jul="july",aug="august",sep="september",oct="october",nov="november",dec="december")
+    mon_num_map <- c(jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12)
     full_month <- paste0(month_map[mon3], yr)
+
+    # X02 is quarterly (Feb, May, Aug, Nov). Find most recent quarter <= reference month.
+    mon_num <- mon_num_map[mon3]
+    x02_quarters <- c(2, 5, 8, 11)
+    prev_q <- x02_quarters[x02_quarters <= mon_num]
+    if (length(prev_q) == 0) {
+      x02_mon <- 11; x02_yr <- as.character(as.integer(yr) - 1)
+    } else {
+      x02_mon <- max(prev_q); x02_yr <- yr
+    }
+    x02_mon3 <- names(mon_num_map)[mon_num_map == x02_mon]
+    x02_mm <- paste0(x02_mon3, x02_yr)
+
     list(
       A01   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/summaryoflabourmarketstatistics/current/a01", mm, ".xls"),
-      HR1   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peoplenotinwork/redundancies/datasets/hr1advancenotificationofredundanciesmonthlydata/current/hr1", mm, ".xlsx"),
+      HR1   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/hr1potentialredundancies/", full_month, "/hr1", full_month, ".xlsx"),
       X09   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/x09realaverageweeklyearningsusingconsumerpriceinflationseasonallyadjusted/", full_month, "/x09", mm, ".xlsx"),
       RTISA = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/realtimeinformationstatisticsreferencetableseasonallyadjusted/current/rtisa", mm, ".xlsx"),
       CLA01 = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peoplenotinwork/outofworkbenefits/datasets/claimantcountcla01/current/cla01", mm, ".xlsx"),
-      X02   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/labourmarketflowsx02/current/x02", mm, ".xlsx")
+      X02   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/labourforcesurveyflowsestimatesx02/current/x02", x02_mm, ".xls"),
+      OECD_UE    = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.UNE_LF.PT_LF_SUB..Y._T.Y_GE15..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
+      OECD_INACT = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.OLF_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
+      OECD_EMP   = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.EMP_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2018-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels"
     )
   }
 
@@ -870,27 +880,7 @@ server <- function(input, output, session) {
     .build_ons_urls(reference_manual_month())
   })
 
-  # ONS download links panel (manual tab)
-  output$ons_download_links <- renderUI({
-    urls <- ons_download_urls()
-    file_descriptions <- c(
-      A01   = "A01 \u2013 Summary of Labour Market Statistics",
-      HR1   = "HR1 \u2013 Advance Notification of Redundancies",
-      X09   = "X09 \u2013 Real Average Weekly Earnings (CPI)",
-      RTISA = "RTISA \u2013 Real-time Information Statistics (SA)",
-      CLA01 = "CLA01 \u2013 Claimant Count",
-      X02   = "X02 \u2013 Labour Market Flows"
-    )
-    link_tags <- lapply(names(urls), function(nm) {
-      div(style = "margin-bottom: 6px;",
-          tags$a(href = urls[[nm]], target = "_blank",
-                 class = "govuk-link", style = "font-size: 16px;",
-                 file_descriptions[[nm]]))
-    })
-    div(style = "margin-top: 8px;", tagList(link_tags),
-        p(class = "govuk-hint", style = "margin-top: 8px; font-size: 14px;",
-          "OECD files are not available from ONS. Download separately from OECD.Stat."))
-  })
+  # (ONS download links are integrated into the file status tags below)
   
   output$upload_status <- renderUI({
     all_files <- list(
@@ -902,12 +892,17 @@ server <- function(input, output, session) {
       `OECD Inact` = uploaded_files$oecd_inact
     )
     urls <- ons_download_urls()
+    # Map display names to URL keys (OECD tags use different display names)
+    url_key_map <- c(A01 = "A01", HR1 = "HR1", RTISA = "RTISA", X09 = "X09",
+                     CLA01 = "CLA01", X02 = "X02",
+                     `OECD UE` = "OECD_UE", `OECD Emp` = "OECD_EMP", `OECD Inact` = "OECD_INACT")
     file_tags <- lapply(names(all_files), function(nm) {
+      url_key <- url_key_map[[nm]]
       if (!is.null(all_files[[nm]])) {
         span(class = "govuk-tag govuk-tag--green", style = "margin: 2px;",
              paste0(nm, " \u2713"))
-      } else if (nm %in% names(urls)) {
-        tags$a(href = urls[[nm]], target = "_blank",
+      } else if (!is.null(url_key) && url_key %in% names(urls)) {
+        tags$a(href = urls[[url_key]], target = "_blank",
                style = "text-decoration: none;",
                span(class = "govuk-tag govuk-tag--grey", style = "margin: 2px; cursor: pointer;", nm))
       } else {
@@ -915,11 +910,14 @@ server <- function(input, output, session) {
       }
     })
     mm <- reference_manual_month()
+    month_label <- if (!is.null(mm) && nzchar(mm)) manual_month_to_display(mm) else "the reference month"
+    hint_line <- div(class = "govuk-hint", style = "margin-top: 6px; font-size: 14px;",
+                     paste0("Click a grey button to download data for ", month_label, "."))
     month_line <- if (!is.null(mm) && nzchar(mm) && !is.null(uploaded_files$a01)) {
       div(style = "margin-top: 6px; font-weight: 600;",
           paste0("Reference month: ", manual_month_to_display(mm)))
     }
-    div(style = "margin-top: 10px;", tagList(file_tags), month_line)
+    div(style = "margin-top: 10px;", tagList(file_tags), hint_line, month_line)
   })
   
   # Detect vacancies periods from A01 and populate manual dropdown
@@ -1349,8 +1347,20 @@ server <- function(input, output, session) {
     parsed <- .parse_month_input(input$auto_ref_month_input)
     if (!is.null(parsed)) reference_manual_month(parsed)
   }, ignoreInit = TRUE)
-  
-  
+
+  # pre-populate manual tab month input with auto-detected month
+  observe({
+    mm <- reference_manual_month()
+    if (!is.null(mm) && nzchar(mm)) {
+      display <- manual_month_to_display(mm)
+      # only set if the input is currently empty (i.e. user hasn't typed yet)
+      if (is.null(input$ref_month_input) || !nzchar(input$ref_month_input)) {
+        updateTextInput(session, "ref_month_input", value = display)
+      }
+    }
+  }) |> bindEvent(reference_manual_month(), once = TRUE)
+
+
   # preview: dashboard
   
   observeEvent(input$preview_dashboard, {
@@ -1463,13 +1473,9 @@ server <- function(input, output, session) {
       if (!is.null(mm) && nzchar(mm)) {
         manual_month <<- tolower(mm)
       }
-      
-      # vacancies & payroll choices (use toggle buttons)
-      vacancies_mode <<- auto_selected_vac_period()
-      payroll_mode <<- auto_selected_pay_period()
-      
+
       incProgress(0.2, detail = "Step 4/6: Running calculations...")
-      
+
       tryCatch({
         source(calculations_path, local = FALSE)
       }, error = function(e) {
@@ -1509,9 +1515,6 @@ server <- function(input, output, session) {
 
       mm <- reference_manual_month()
       if (!is.null(mm) && nzchar(mm)) manual_month <<- tolower(mm)
-
-      vacancies_mode <<- auto_selected_vac_period()
-      payroll_mode <<- auto_selected_pay_period()
 
       incProgress(0.3, detail = "Running calculations...")
       tryCatch({
@@ -1888,8 +1891,6 @@ server <- function(input, output, session) {
         manual_month = NULL,
         file_a01 = uploaded_files$a01, file_hr1 = uploaded_files$hr1,
         file_x09 = uploaded_files$x09, file_rtisa = uploaded_files$rtisa,
-        vac_end_override = .parse_period_end(.selected_vac_label()),
-        payroll_end_override = .parse_period_end(.selected_pay_label()),
         target_env = globalenv()
       )
       manual_month <<- detected_mm
@@ -1926,13 +1927,10 @@ server <- function(input, output, session) {
       source(excel_calc_path, local = FALSE)
       if (file.exists(config_path)) source(config_path, local = FALSE)
       
-      pay_label <- .selected_pay_label()
       detected_mm <- run_calculations_from_excel(
         manual_month = NULL,
         file_a01 = uploaded_files$a01, file_hr1 = uploaded_files$hr1,
         file_x09 = uploaded_files$x09, file_rtisa = uploaded_files$rtisa,
-        vac_end_override = .parse_period_end(.selected_vac_label()),
-        payroll_end_override = .parse_period_end(pay_label),
         target_env = globalenv()
       )
       manual_month <<- detected_mm
