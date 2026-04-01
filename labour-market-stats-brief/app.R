@@ -528,7 +528,8 @@ ui <- fluidPage(
                                              
                                              h2(class = "govuk-heading-m", "Download"),
                                              downloadButton("manual_download_word", "Download Word", class = "govuk-button govuk-button--blue"),
-                                             downloadButton("manual_download_excel", "Download Excel", class = "govuk-button")
+                                             downloadButton("manual_download_excel", "Download Excel", class = "govuk-button"),
+                                             uiOutput("manual_copilot_btn")
                                          )
                                      )
                             ),
@@ -576,7 +577,8 @@ ui <- fluidPage(
 
                                              h2(class = "govuk-heading-m", "Download"),
                                              downloadButton("download_word", "Download Word", class = "govuk-button govuk-button--blue"),
-                                             downloadButton("download_excel", "Download Excel", class = "govuk-button")
+                                             downloadButton("download_excel", "Download Excel", class = "govuk-button"),
+                                             uiOutput("auto_copilot_btn")
                                          )
                                      )
                             )
@@ -2305,6 +2307,57 @@ server <- function(input, output, session) {
       ),
       footnote
     )
+  })
+}
+
+  # copilot / ai prompt builder — copies stats prompt to clipboard
+  .build_ai_prompt <- function() {
+    mm <- reference_manual_month()
+    month_label <- if (!is.null(mm) && nzchar(mm)) manual_month_to_display(mm) else "the latest period"
+
+    summ <- summary_data()
+    top10 <- topten_data()
+
+    lines <- c()
+    if (!is.null(summ)) {
+      lines <- c(lines, "SUMMARY LINES:", vapply(1:10, function(i) {
+        txt <- summ[[paste0("line", i)]]
+        if (is.null(txt) || txt == "") "(not available)" else txt
+      }, character(1)))
+    }
+    if (!is.null(top10)) {
+      lines <- c(lines, "", "TOP TEN STATISTICS:", vapply(1:10, function(i) {
+        txt <- top10[[paste0("line", i)]]
+        if (is.null(txt) || txt == "") "(not available)" else txt
+      }, character(1)))
+    }
+
+    if (length(lines) == 0) return(NULL)
+
+    paste0(
+      "You are a UK government statistician. Using the labour market statistics below for ",
+      month_label, ", draft external commentary suitable for a ministerial briefing. ",
+      "Be concise, factual, and highlight key movements.\n\n",
+      paste(lines, collapse = "\n")
+    )
+  }
+
+  output$manual_copilot_btn <- renderUI({
+    prompt <- .build_ai_prompt()
+    if (is.null(prompt)) return(NULL)
+    escaped <- gsub("'", "\\\\'", gsub("\n", "\\\\n", prompt))
+    js <- sprintf("navigator.clipboard.writeText('%s').then(function(){alert('Prompt copied to clipboard — paste into any AI assistant.')});", escaped)
+    tags$button(class = "govuk-button govuk-button--secondary", style = "margin-left: 8px;",
+                onclick = js, "Draft Commentary (AI)")
+  })
+
+  output$auto_copilot_btn <- renderUI({
+    prompt <- .build_ai_prompt()
+    if (is.null(prompt)) return(NULL)
+    escaped <- gsub("'", "\\\\'", gsub("\n", "\\\\n", prompt))
+    js <- sprintf("navigator.clipboard.writeText('%s').then(function(){alert('Prompt copied to clipboard — paste into any AI assistant.')});", escaped)
+    tags$button(class = "govuk-button govuk-button--secondary", style = "margin-left: 8px;",
+                onclick = js, "Draft Commentary (AI)")
   })
 }
 
