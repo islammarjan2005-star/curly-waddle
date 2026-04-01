@@ -1873,6 +1873,31 @@ server <- function(input, output, session) {
     g7_members <- c("United Kingdom", "United States", "France", "Germany",
                     "Italy", "Canada", "Japan")
 
+    # override uk row with ons-derived rates when available
+    .override_uk <- function(data, ons_val, tp) {
+      if (is.na(ons_val)) return(data)
+      uk_row <- data.frame(country = "United Kingdom", period = tp, value = ons_val,
+                           stringsAsFactors = FALSE)
+      if (is.null(data)) return(uk_row)
+      data <- data[data$country != "United Kingdom", , drop = FALSE]
+      rbind(data, uk_row)
+    }
+    .gv <- function(name) if (exists(name, envir = globalenv())) get(name, envir = globalenv()) else NA_real_
+    uk_ur <- .gv("unemp_rt_cur"); uk_er <- .gv("emp_rt_cur"); uk_ir <- .gv("inact_rt_cur")
+    mm <- if (exists("manual_month", envir = globalenv())) get("manual_month", envir = globalenv()) else ""
+    uk_tp <- {
+      mm2 <- tolower(gsub("[[:space:]]+", "", as.character(mm)))
+      mon3 <- substr(gsub("[^a-z]", "", mm2), 1, 3)
+      yr <- as.integer(substr(gsub("[^0-9]", "", mm2), 1, 4))
+      m <- match(mon3, tolower(month.abb))
+      if (!is.na(m) && !is.na(yr)) paste0(yr, "-Q", ceiling(m / 3)) else NA_character_
+    }
+    if (!is.na(uk_ur) || !is.na(uk_er) || !is.na(uk_ir)) {
+      unemp_data <- .override_uk(unemp_data, uk_ur, uk_tp)
+      emp_data   <- .override_uk(emp_data,   uk_er, uk_tp)
+      inact_data <- .override_uk(inact_data, uk_ir, uk_tp)
+    }
+
     .get_val <- function(data, country) {
       if (is.null(data)) return(list(period = NA_character_, value = NA_real_))
       idx <- match(country, data$country)

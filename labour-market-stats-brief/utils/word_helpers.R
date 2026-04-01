@@ -276,6 +276,29 @@ sv <- function(name, default = NA_real_) {
   list(bullet1 = b1, bullet2 = b2, bullet3 = b3)
 }
 
+# convert manual_month (e.g. "dec2025") to oecd quarter format (e.g. "2025-Q4")
+.manual_month_to_quarter <- function(mm) {
+  if (is.null(mm) || !nzchar(mm)) return("")
+  mm <- tolower(gsub("[[:space:]]+", "", as.character(mm)))
+  mon3 <- substr(gsub("[^a-z]", "", mm), 1, 3)
+  yr <- as.integer(substr(gsub("[^0-9]", "", mm), 1, 4))
+  m <- match(mon3, tolower(month.abb))
+  if (is.na(m) || is.na(yr)) return("")
+  q <- ceiling(m / 3)
+  paste0(yr, "-Q", q)
+}
+
+# override oecd uk row with ons-derived rates when available
+.get_uk_ons_overrides <- function() {
+  ur <- sv("unemp_rt_cur")
+  er <- sv("emp_rt_cur")
+  ir <- sv("inact_rt_cur")
+  mm <- sv("manual_month", default = "")
+  tp <- .manual_month_to_quarter(mm)
+  if (is.na(ur) && is.na(er) && is.na(ir)) return(NULL)
+  list(unemp = ur, emp = er, inact = ir, period = tp)
+}
+
 # fills oecd placeholders for all countries, g7 average, and bullets
 .fill_oecd_placeholders <- function(doc, unemp_data, emp_data, inact_data) {
   country_codes <- c("United Kingdom" = "uk", "United States" = "us",
@@ -288,6 +311,22 @@ sv <- function(name, default = NA_real_) {
     idx <- match(country, data$country)
     if (is.na(idx)) return(list(period = "", value = NA_real_))
     list(period = data$period[idx], value = data$value[idx])
+  }
+
+  # override uk values with ons data so oecd table uses domestic source
+  uk_ons <- .get_uk_ons_overrides()
+  if (!is.null(uk_ons)) {
+    .override_uk <- function(data, ons_val, tp) {
+      if (is.na(ons_val)) return(data)
+      uk_row <- data.frame(country = "United Kingdom", period = tp, value = ons_val,
+                           stringsAsFactors = FALSE)
+      if (is.null(data)) return(uk_row)
+      data <- data[data$country != "United Kingdom", , drop = FALSE]
+      rbind(data, uk_row)
+    }
+    unemp_data <- .override_uk(unemp_data, uk_ons$unemp, uk_ons$period)
+    emp_data   <- .override_uk(emp_data,   uk_ons$emp,   uk_ons$period)
+    inact_data <- .override_uk(inact_data, uk_ons$inact, uk_ons$period)
   }
 
   stale_parts <- character(0)
