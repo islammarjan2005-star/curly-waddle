@@ -1,4 +1,4 @@
-# helpers.R — shared formatters and utility functions
+# shared formatters and utility functions used across all sheets
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -8,10 +8,9 @@ suppressPackageStartupMessages({
   library(tibble)
 })
 
-# month abbreviation -> number (used across several modules)
 month_map <- c(jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12)
 
-# auto-detect manual_month from database (latest LFS period + 2 months)
+# latest lfs period + 2 months gives us the anchor month
 auto_detect_manual_month <- function() {
   tryCatch({
     conn <- DBI::dbConnect(RPostgres::Postgres())
@@ -34,7 +33,7 @@ auto_detect_manual_month <- function() {
     if (all(is.na(ends))) return(NULL)
 
     latest_end <- max(ends, na.rm = TRUE)
-    # manual_month = LFS end + 2 months (convention: anchor month of the release)
+    # release anchor = lfs end + 2 months
     anchor <- latest_end %m+% months(2)
     tolower(paste0(format(anchor, "%b"), format(anchor, "%Y")))
   }, error = function(e) {
@@ -43,9 +42,6 @@ auto_detect_manual_month <- function() {
   })
 }
 
-# date/period helpers
-
-# "feb2026" -> Date 2026-02-01
 parse_manual_month <- function(mm) {
   if (is.null(mm) || is.na(mm) || !nzchar(mm)) return(NULL)
   mm <- tolower(trimws(mm))
@@ -57,7 +53,7 @@ parse_manual_month <- function(mm) {
   as.Date(sprintf("%04d-%02d-01", yr, mon))
 }
 
-# lfs 3-month label: end_date -> "Oct-Dec 2025"
+# e.g. "Oct-Dec 2025"
 make_lfs_label <- function(end_date) {
   if (is.null(end_date) || is.na(end_date)) return("")
   end_date <- as.Date(end_date)
@@ -65,7 +61,7 @@ make_lfs_label <- function(end_date) {
   sprintf("%s-%s %s", format(start_date, "%b"), format(end_date, "%b"), format(end_date, "%Y"))
 }
 
-# lfs narrative label: end_date -> "October 2025 to December 2025"
+# e.g. "October 2025 to December 2025"
 lfs_label_narrative <- function(end_date) {
   if (is.null(end_date) || is.na(end_date)) return("")
   end_date <- as.Date(end_date)
@@ -73,22 +69,20 @@ lfs_label_narrative <- function(end_date) {
   paste0(format(start_date, "%B %Y"), " to ", format(end_date, "%B %Y"))
 }
 
-# payroll/sector format: "July 2025"
 make_payroll_label <- function(date) {
   format(date, "%B %Y")
 }
 
-# yyyy-mm-dd label (used by wages sheets)
 make_ymd_label <- function(date) {
   format(date, "%Y-%m-%d")
 }
 
-# datetime label for cpi/hr1 lookups
+# cpi/hr1 tables expect datetime strings not plain dates
 make_datetime_label <- function(date) {
   paste0(format(date, "%Y-%m-%d"), " 00:00:00")
 }
 
-# get value by code + period label
+# look up a single value by dataset code + period label
 val_by_code <- function(pg_data, code, period_label) {
   if (is.null(pg_data) || nrow(pg_data) == 0) return(NA_real_)
   match_row <- pg_data %>%
@@ -97,9 +91,7 @@ val_by_code <- function(pg_data, code, period_label) {
   suppressWarnings(as.numeric(match_row$value[1]))
 }
 
-# formatters
-
-# to 1dp (bumps to more places if rounds to zero)
+# bumps to more decimal places if rounding to 1dp would give zero
 fmt_one_dec <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   if (length(x) == 0 || is.na(x)) return("\u2014")
@@ -111,21 +103,19 @@ fmt_one_dec <- function(x) {
   format(round(x, 4), nsmall = 4, trim = TRUE)
 }
 
-# 5.1 -> "5.1%"
 fmt_pct <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   if (length(x) == 0 || is.na(x)) return("\u2014")
   paste0(fmt_one_dec(x), "%")
 }
 
-# 0.3 -> "0.3 percentage points" (unsigned)
 fmt_pp <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   if (length(x) == 0 || is.na(x)) return("\u2014")
   paste0(fmt_one_dec(abs(x)), " percentage points")
 }
 
-# direction word: positive -> up_word, negative -> down_word, zero -> "unchanged at"
+# picks direction word based on sign
 fmt_dir <- function(x, up_word = "up", down_word = "down") {
   if (is.na(x)) return("")
   if (x > 0) up_word
@@ -133,18 +123,14 @@ fmt_dir <- function(x, up_word = "up", down_word = "down") {
   else "unchanged at"
 }
 
-# integer with comma separators
+# integer with comma separators, e.g. 1234 -> "1,234"
 fmt_int <- function(x) {
   x <- suppressWarnings(as.numeric(x))
   if (length(x) == 0 || is.na(x)) return("\u2014")
   format(round(x), big.mark = ",", scientific = FALSE)
 }
 
-fmt_mill <- function(x) {
-  ifelse(is.na(x), "\u2014", paste0(format(round(x, 1), nsmall = 1)))
-}
-
-# signed formatters
+# --- signed formatters (include +/- prefix) ---
 
 format_int <- function(x) {
   if (is.na(x)) return(NA_character_)
@@ -186,7 +172,7 @@ format_gbp_signed0 <- function(x) {
   paste0(ifelse(v > 0, "+\u00A3", "-\u00A3"), format(abs(v), big.mark = ","))
 }
 
-# unsigned formatters
+# --- unsigned formatters ---
 
 format_int_unsigned <- function(x) {
   if (is.na(x)) return(NA_character_)
@@ -208,14 +194,12 @@ format_pct1_unsigned <- function(x) {
 }
 
 # --- summary/narrative helpers ---
-
-# safe numeric coercion (handles NULL, length-0, NA)
 safe_num <- function(x) {
   if (is.null(x) || length(x) == 0) return(NA_real_)
   suppressWarnings(as.numeric(x[1]))
 }
 
-# percentage change from a delta: delta / (cur - delta) * 100
+# back out percentage change when we only have the absolute delta
 pct_from_delta <- function(cur, delta) {
   cur <- safe_num(cur); delta <- safe_num(delta)
   base <- cur - delta
@@ -223,27 +207,24 @@ pct_from_delta <- function(cur, delta) {
   (delta / base) * 100
 }
 
-# signed integer with commas: 1234 -> "+1,234"
 fmt_signed_int <- function(x) {
   if (is.na(x)) return("\u2014")
   s <- if (x > 0) "+" else if (x < 0) "-" else ""
   paste0(s, format(round(abs(x), 0), big.mark = ","))
 }
 
-# unsigned integer with commas: 1234 -> "1,234"
 fmt_int_1k <- function(x) {
   if (is.na(x)) return("\u2014")
   format(round(abs(x)), big.mark = ",")
 }
 
-# signed integer with commas: 1234 -> "+1,234"
 fmt_signed_int_1k <- function(x) {
   if (is.na(x)) return("\u2014")
   s <- if (x > 0) "+" else if (x < 0) "-" else ""
   paste0(s, format(round(abs(x)), big.mark = ","))
 }
 
-# signed pp: 0.3 -> "+0.3 percentage points"
+# signed pp for narrative text
 fmt_signed_pp <- function(x) {
   if (is.na(x)) return("\u2014")
   s <- if (x > 0) "+" else if (x < 0) "-" else ""
@@ -256,7 +237,7 @@ fmt_signed_pp <- function(x) {
   }
 }
 
-# unsigned percentage: 5.1 -> "5.1%"
+# unsigned percentage for narrative text
 fmt_pct_unsigned <- function(x) {
   if (is.na(x)) return("\u2014")
   v <- abs(as.numeric(x))

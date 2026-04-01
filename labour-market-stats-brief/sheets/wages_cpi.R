@@ -1,5 +1,4 @@
-# wages cpi module - x09 cpi-adjusted wages
-# table: ons.labour_market__weekly_earnings_cpi
+# x09 cpi-adjusted wages (ons.labour_market__weekly_earnings_cpi)
 
 CPI_CURRENT <- list(
   TOTAL_EARNINGS_TYPE = "Total pay, seasonally adjusted",
@@ -78,18 +77,17 @@ compute_wages_cpi <- function(pg_data, manual_mm) {
   dec2007   <- as.Date("2007-12-01")
   pandemic3 <- c(as.Date("2019-12-01"), as.Date("2020-01-01"), as.Date("2020-02-01"))
 
-  # current yoy % (3mo avg)
   latest_total <- val_cpi_current(pg_data, make_datetime_label(anchor_m), CPI_CURRENT$TOTAL_EARNINGS_TYPE)
   latest_reg   <- val_cpi_current(pg_data, make_datetime_label(anchor_m), CPI_CURRENT$REG_EARNINGS_TYPE)
 
-  # annualised £ changes: 3mo avg real awe difference * 52
+  # annualised by multiplying weekly difference by 52
   calc_change <- function(dates_a, dates_b, earnings_type) {
     a <- get_cpi_raw_avg(pg_data, dates_a, earnings_type)
     b <- get_cpi_raw_avg(pg_data, dates_b, earnings_type)
     if (is.na(a) || is.na(b)) NA_real_ else (a - b) * 52
   }
 
-  # current 3mo avg real awe (for historical comparisons)
+  # 3mo avg real awe needed for dec 2007 and pandemic comparisons
   cur_total_awe <- get_cpi_raw_avg(pg_data, win3, CPI_CHANGE$TOTAL_EARNINGS_TYPE)
   cur_reg_awe   <- get_cpi_raw_avg(pg_data, win3, CPI_CHANGE$REG_EARNINGS_TYPE)
 

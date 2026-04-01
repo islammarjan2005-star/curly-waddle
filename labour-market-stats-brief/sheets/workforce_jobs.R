@@ -1,6 +1,5 @@
-# workforce jobs by industry
-# table: ons.labour_market_workforce_jobs
-# time period format: "mar 98 (r)" (quarterly, end-month)
+# workforce jobs by industry from ons.labour_market_workforce_jobs
+# periods are quarterly end-months like "mar 98 (r)"
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -24,7 +23,7 @@ FROM "ons"."labour_market_workforce_jobs"')
   finally = DBI::dbDisconnect(conn))
 }
 
-# "mar 98 (r)" -> 1998-03-01
+# parse "mar 98 (r)" style labels to proper dates
 parse_wfj_period_to_date <- function(x) {
   if (is.na(x) || !nzchar(x)) return(NA)
   x <- trimws(gsub("\\(.*\\)", "", x))

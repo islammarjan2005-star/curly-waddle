@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# generated output files (keep templates like ManualDB.docx tracked)
+utils/DBoutput.docx

@@ -1,4 +1,4 @@
-# calculations - sources all sheets and computes all metrics
+# sources all sheets and computes all dashboard metrics
 
 source("utils/helpers.R")
 if (!exists("manual_month", inherits = TRUE)) source("utils/config.R")
@@ -46,7 +46,7 @@ source("sheets/payroll_by_age.R")
   if (is.null(val)) as.Date(NA) else val
 }
 
-# run all sheet calculations
+# run each sheet, catching errors so one failure doesn't kill everything
 .err <- function(msg) function(e) { warning(msg, ": ", e$message); NULL }
 
 vac_mode     <- if (exists("vacancies_mode", inherits = TRUE)) get("vacancies_mode", inherits = TRUE) else "latest"
@@ -69,7 +69,7 @@ payroll_by_age  <- tryCatch(calculate_payroll_by_age(manual_month),             
 cm       <- parse_manual_month(manual_month)
 anchor_m <- cm %m-% months(2)
 
-# extract all dashboard variables (guarded against NULL)
+# extract all dashboard variables (guarded against null sheet results)
 
 # employment
 emp16_cur <- .safe(lfs, "emp16", "cur")
@@ -130,7 +130,7 @@ vac_dy <- .safe(vac, "dy")
 vac_dc <- .safe(vac, "dc")
 vac_de <- .safe(vac, "de")
 
-# payroll (dashboard - 3 month avg)
+# payroll (3 month avg for dashboard)
 payroll_cur <- .safe(payroll, "cur")
 payroll_dq <- .safe(payroll, "dq")
 payroll_dy <- .safe(payroll, "dy")
@@ -139,13 +139,13 @@ payroll_de <- .safe(payroll, "de")
 
 
 
-# payroll flash ( - latest single month)
+# payroll flash (latest single month, not 3m avg)
 payroll_flash_cur <- .safe(payroll, "flash_cur")
 payroll_flash_dy <- .safe(payroll, "flash_dy")
 payroll_flash_de <- .safe(payroll, "flash_de")
 payroll_flash_dm <- .safe(payroll, "flash_dm")
 
-# nominal wages - total
+# wages - nominal total
 latest_wages <- .safe(wages_nom, "total", "cur")
 wages_change_q <- .safe(wages_nom, "total", "dq")
 wages_change_y <- .safe(wages_nom, "total", "dy")
@@ -155,7 +155,7 @@ wages_total_public <- .safe(wages_nom, "total", "public")
 wages_total_private <- .safe(wages_nom, "total", "private")
 wages_total_qchange <- .safe(wages_nom, "total", "qchange")
 
-# nominal wages - regular
+# wages - nominal regular
 latest_regular_cash <- .safe(wages_nom, "regular", "cur")
 wages_reg_change_q <- .safe(wages_nom, "regular", "dq")
 wages_reg_change_y <- .safe(wages_nom, "regular", "dy")
@@ -165,7 +165,7 @@ wages_reg_public <- .safe(wages_nom, "regular", "public")
 wages_reg_private <- .safe(wages_nom, "regular", "private")
 wages_reg_qchange <- .safe(wages_nom, "regular", "qchange")
 
-# cpi wages - total
+# wages - cpi-adjusted total
 latest_wages_cpi <- .safe(wages_cpi, "total", "cur")
 wages_cpi_change_q <- .safe(wages_cpi, "total", "dq")
 wages_cpi_change_y <- .safe(wages_cpi, "total", "dy")
@@ -174,7 +174,7 @@ wages_cpi_change_election <- .safe(wages_cpi, "total", "de")
 wages_cpi_total_vs_dec2007 <- .safe(wages_cpi, "total", "pct_vs_dec2007")
 wages_cpi_total_vs_pandemic <- .safe(wages_cpi, "total", "pct_vs_pandemic")
 
-# cpi wages - regular
+# wages - cpi-adjusted regular
 latest_regular_cpi <- .safe(wages_cpi, "regular", "cur")
 wages_reg_cpi_change_q <- .safe(wages_cpi, "regular", "dq")
 wages_reg_cpi_change_y <- .safe(wages_cpi, "regular", "dy")
@@ -194,21 +194,21 @@ redund_dy <- .safe(redund, "dy")
 redund_dc <- .safe(redund, "dc")
 redund_de <- .safe(redund, "de")
 
-# sectors - hospitality
+# hospitality
 hosp_cur <- .safe(sectors, "hospitality", "cur")
 hosp_dm <- .safe(sectors, "hospitality", "dm")
 hosp_dy <- .safe(sectors, "hospitality", "dy")
 hosp_dc <- .safe(sectors, "hospitality", "dc")
 hosp_de <- .safe(sectors, "hospitality", "de")
 
-# sectors - retail
+# retail
 retail_cur <- .safe(sectors, "retail", "cur")
 retail_dm <- .safe(sectors, "retail", "dm")
 retail_dy <- .safe(sectors, "retail", "dy")
 retail_dc <- .safe(sectors, "retail", "dc")
 retail_de <- .safe(sectors, "retail", "de")
 
-# sectors - health
+# health
 health_cur <- .safe(sectors, "health", "cur")
 health_dm <- .safe(sectors, "health", "dm")
 health_dy <- .safe(sectors, "health", "dy")
@@ -222,10 +222,10 @@ hr1_dy <- .safe(hr1, "dy")
 hr1_dc <- .safe(hr1, "dc")
 hr1_de <- .safe(hr1, "de")
 
-# inactivity driver text
+# narrative text for inactivity drivers section
 inact_driver_text <- tryCatch(generate_inactivity_driver_text(inact_reasons), error = function(e) "")
 
-#  labels (guarded against NULL results)
+# period labels (fallback to anchor-derived labels if sheets returned null)
 
 lfs_period_label <- if (!is.null(lfs) && !is.null(lfs$emp16) && !is.na(.safe_date(lfs, "emp16", "end"))) {
   lfs_label_narrative(lfs$emp16$end)

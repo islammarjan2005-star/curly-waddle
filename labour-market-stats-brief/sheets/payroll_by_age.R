@@ -1,5 +1,4 @@
-# payroll employees by age
-# table: ons.labour_market_employees_age
+# payroll employees by age (ons.labour_market_employees_age)
 # time period format: "january 2026"
 
 suppressPackageStartupMessages({
@@ -24,7 +23,6 @@ FROM "ons"."labour_market_employees_age"')
   finally = DBI::dbDisconnect(conn))
 }
 
-# "january 2026" -> 2026-01-01
 parse_month_label_to_date <- function(label) {
   if (is.na(label) || !nzchar(label)) return(NA)
   suppressWarnings(as.Date(paste0("01 ", trimws(label)), format = "%d %B %Y"))

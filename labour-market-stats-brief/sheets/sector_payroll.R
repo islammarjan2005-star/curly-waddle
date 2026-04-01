@@ -1,5 +1,5 @@
-# sector payroll module - rtisa sheet 23
-# sic sections: I = hospitality, G = retail, Q = health
+# rtisa sheet 23 - sector payroll
+# sic sections: i = hospitality, g = retail, q = health
 
 SECTOR_CODES <- list(
   HOSPITALITY = "I",

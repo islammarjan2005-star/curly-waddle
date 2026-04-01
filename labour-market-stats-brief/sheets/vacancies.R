@@ -1,4 +1,4 @@
-# vacancies module - a01 sheet 19
+# vacancies - a01 sheet 19
 
 VAC_CODES <- list(
   VAC     = "AP2Y",
@@ -19,7 +19,7 @@ FROM "ons"."labour_market__vacancies_business"')
   finally = DBI::dbDisconnect(conn))
 }
 
-# "jul-sep 2025" -> 2025-09-01 (end month)
+# parse "jul-sep 2025" to end-month date (2025-09-01)
 parse_lfs_label_to_date <- function(label) {
   matches <- regmatches(label, gregexpr("[A-Za-z]{3}", label))[[1]]
   year    <- regmatches(label, gregexpr("[0-9]{4}", label))[[1]]
@@ -48,7 +48,7 @@ compute_vacancies <- function(pg_data, manual_mm,
 
   mode <- match.arg(mode)
 
-  # aligned: pick latest period <= dashboard reference quarter end
+  # aligned mode: pick latest period <= dashboard reference quarter end
   if (mode == "aligned") {
     target_end <- tryCatch(parse_manual_month(manual_mm) %m-% months(2), error = function(e) NA)
     if (!is.na(target_end)) {

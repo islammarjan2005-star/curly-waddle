@@ -1,4 +1,4 @@
-# lfs module - a01 sheet 2 (employment, unemployment, inactivity)
+# a01 sheet 2 - employment, unemployment, inactivity
 
 LFS_CODES <- list(
   EMP16        = "MGRZ",

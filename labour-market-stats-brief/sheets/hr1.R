@@ -1,5 +1,4 @@
-# hr1 module - redundancy notifications
-# table: ons.labour_market__redundancies_region
+# hr1 redundancy notifications (ons.labour_market__redundancies_region)
 
 HR1_REGION <- "GB"
 

@@ -1,4 +1,4 @@
-# top ten stats module - narrative generation for briefing
+# top ten stats - narrative generation for the briefing
 
 library(glue)
 
@@ -11,13 +11,13 @@ dir_word <- function(x) {
   else "no change,"
 }
 
-# rounds to nearest 1,000 before formatting
+# rounds to nearest 1k before formatting
 fmt_int_1k_top10 <- function(x) {
   if (is.na(x)) return("\u2014")
   format(round(abs(x), -3), big.mark = ",", scientific = FALSE)
 }
 
-# flash change: x is in thousands, display rounded to nearest 1,000
+# flash change: x is in thousands, display rounded to nearest 1k
 fmt_flash_change <- function(x) {
   if (is.na(x)) return("\u2014")
   format(abs(round(x * 1000, -3)), big.mark = ",", scientific = FALSE)
@@ -27,8 +27,6 @@ fmt_rate <- function(x) {
   if (is.na(x)) return("\u2014")
   format(round(x, 1), nsmall = 1)
 }
-
-# generate top ten stats
 
 generate_top_ten <- function() {
   tryCatch({
@@ -186,7 +184,7 @@ generate_top_ten <- function() {
     .comment = ""
   )
 
-  # vacancies period (can differ from lfs reference quarter)
+  # vacancies period can differ from the lfs reference quarter
   vac_period_label <- lfs_period_label
   if (exists("vac", inherits = TRUE)) {
     v <- get("vac", inherits = TRUE)

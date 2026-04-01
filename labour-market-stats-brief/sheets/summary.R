@@ -1,5 +1,5 @@
-# summary module - produces 10 narrative lines
-# requires calculations.R to have been sourced
+# produces the 10 narrative lines for the summary sheet
+# needs calculations.R loaded first
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -8,7 +8,7 @@ suppressPackageStartupMessages({
 
 if (!exists("fmt_pct", inherits = TRUE)) source("utils/helpers.R")
 
-# workforce jobs totals and q/y changes
+# workforce jobs totals and quarterly/yearly changes
 calc_workforce_jobs_changes <- function() {
   if (!exists("fetch_workforce_jobs", inherits = TRUE)) return(list(cur=NA, dq=NA, dy=NA, pct_q=NA, pct_y=NA))
   df <- tryCatch(fetch_workforce_jobs(), error = function(e) NULL)
@@ -33,12 +33,12 @@ calc_workforce_jobs_changes <- function() {
   end_cur <- max(totals$period_date, na.rm = TRUE)
   cur <- totals$total[totals$period_date == end_cur][1]
   
-  # previous quarter: 
+  # previous quarter
   target_q <- end_cur %m-% months(3)
   prev_q_date <- max(totals$period_date[totals$period_date <= target_q], na.rm = TRUE)
   prev_q <- totals$total[totals$period_date == prev_q_date][1]
   
-  # year ago:
+  # year ago
   target_y <- end_cur %m-% months(12)
   prev_y_date <- max(totals$period_date[totals$period_date <= target_y], na.rm = TRUE)
   prev_y <- totals$total[totals$period_date == prev_y_date][1]
@@ -55,7 +55,7 @@ calc_workforce_jobs_changes <- function() {
   )
 }
 
-# youth unemployment (18-24)
+# youth unemployment (18-24) level and quarterly change
 calc_youth_unemp <- function() {
   if (!exists("fetch_unemployment_by_age", inherits = TRUE)) return(list(cur=NA, dq=NA, label=NA, is_largest_since_2022=NA))
   df <- tryCatch(fetch_unemployment_by_age(), error = function(e) NULL)
@@ -70,7 +70,7 @@ calc_youth_unemp <- function() {
     ) %>%
     filter(!is.na(end_date), !is.na(value))
 
-  # 18-24 rows
+  # filter to 18-24 age band
   youth <- df2 %>%
     filter(
       grepl("^\\s*18\\s*\\D*24", age_group, ignore.case = TRUE) | grepl("18", age_group) & grepl("24", age_group),
@@ -81,19 +81,18 @@ calc_youth_unemp <- function() {
   
   if ("All" %in% youth$duration) youth <- youth %>% filter(duration == "All")
   
-  # keep latest period
+  # latest period
   end_cur <- max(youth$end_date, na.rm = TRUE)
   cur_label <- youth %>% filter(end_date == end_cur) %>% slice(1) %>% pull(time_period) %>% as.character() %>% trimws()
   cur <- youth %>% filter(end_date == end_cur) %>% summarise(v = sum(value, na.rm=TRUE)) %>% pull(v)
   
-  # previous quarter:
   target_q <- end_cur %m-% months(3)
   prev_q_date <- max(youth$end_date[youth$end_date <= target_q], na.rm = TRUE)
   prev_q <- youth %>% filter(end_date == prev_q_date) %>% summarise(v = sum(value, na.rm=TRUE)) %>% pull(v)
-  
+
   dq <- if (!is.na(cur) && !is.na(prev_q)) cur - prev_q else NA_real_
-  
-  # largest increase since nov 2022 
+
+  # check if this is the largest quarterly increase since nov 2022
   s <- youth %>%
     group_by(end_date) %>%
     summarise(v = sum(value, na.rm=TRUE), .groups="drop") %>%
@@ -107,7 +106,7 @@ calc_youth_unemp <- function() {
   list(cur=cur, dq=dq, label=cur_label, is_largest_since_2022=is_largest)
 }
 
-# payroll by age - monthly changes
+# payroll by age - finds the 3 age groups with largest monthly drops
 calc_payroll_age_drops <- function() {
   if (!exists("fetch_payroll_by_age", inherits = TRUE)) return(list())
   df <- tryCatch(fetch_payroll_by_age(), error = function(e) NULL)
@@ -146,7 +145,7 @@ calc_payroll_age_drops <- function() {
     if (nrow(top3) >= i) safe_num(top3$delta[i]) else NA_real_
   }
   
-  # NOTE: return numeric deltas (levels). Formatting happens where used.
+  # return numeric deltas (levels) - formatting happens where used
   list(
     a1 = get_age(1), d1 = get_delta(1),
     a2 = get_age(2), d2 = get_delta(2),
@@ -154,7 +153,7 @@ calc_payroll_age_drops <- function() {
   )
 }
 
-# generate summary lines
+# assemble all 10 narrative lines
 generate_summary <- function() {
   tryCatch({
 
@@ -187,7 +186,7 @@ generate_summary <- function() {
       paste0("three months to ", format(parse_manual_month(mm) %m-% months(2), "%B %Y"))
     }
     
-    # payroll (aligned quarter)
+    # payroll (aligned to lfs reference quarter)
     py_cur <- if (!is.null(payroll_aligned)) safe_num(payroll_aligned$cur) else NA_real_
     py_dy  <- if (!is.null(payroll_aligned)) safe_num(payroll_aligned$dy) else NA_real_
     py_dq  <- if (!is.null(payroll_aligned)) safe_num(payroll_aligned$dq) else NA_real_
@@ -202,7 +201,7 @@ generate_summary <- function() {
       "and ", py_dir_q, " by ", fmt_int_1k(abs(py_dq) * 1000), " (", fmt_pct_unsigned(py_pct_q), ") on the quarter in ", lfs_lbl, " (the period comparable with LFS)."
     )
     
-    # payroll flash (latest single month)
+    # payroll flash (single latest month, prone to revision)
     pf_cur_m <- if (!is.null(payroll_latest)) safe_num(payroll_latest$flash_cur) else NA_real_
     pf_dy_k  <- if (!is.null(payroll_latest)) safe_num(payroll_latest$flash_dy)  else NA_real_
     pf_dm_k  <- if (!is.null(payroll_latest)) safe_num(payroll_latest$flash_dm)  else NA_real_
@@ -220,7 +219,7 @@ generate_summary <- function() {
       "and ", pf_dir_m, " by ", fmt_int_1k(abs(pf_dm_k) * 1000), " (", fmt_pct_unsigned(pf_pct_m), ") on the month, although this is prone to revision."
     )
     
-    # workforce jobs changes
+    # workforce jobs
     wfj <- calc_workforce_jobs_changes()
     wfj_dq <- wfj$dq; wfj_dy <- wfj$dy
     wfj_pct_q <- wfj$pct_q; wfj_pct_y <- wfj$pct_y
@@ -234,7 +233,7 @@ generate_summary <- function() {
       "On the year, jobs ", wfj_dir_y, " by ", fmt_int_1k(abs(wfj_dy) * 1000), " (", wfj_pct_y_str, ")."
     )
     
-    # vacancies
+    # vacancies line
     vc_cur <- if (!is.null(vac_latest)) safe_num(vac_latest$cur) else NA_real_
     vc_dq  <- if (!is.null(vac_latest)) safe_num(vac_latest$dq) else NA_real_
     vc_pct_q <- pct_from_delta(vc_cur, vc_dq)
@@ -244,7 +243,7 @@ generate_summary <- function() {
       "Vacancies ", vac_change_word, " by ", fmt_int_1k(abs(vc_dq) * 1000), " (", fmt_pct_unsigned(vc_pct_q), ") on the quarter to ", fmt_int_1k(vc_cur * 1000), " in ", vac_lbl, "."
     )
     
-    # lfs rates
+    # lfs employment/unemployment/inactivity rates
     emp_rt_cur <- if (exists("emp_rt_cur", inherits = TRUE)) safe_num(get("emp_rt_cur", inherits=TRUE)) else NA_real_
     emp_rt_dq  <- if (exists("emp_rt_dq", inherits = TRUE)) safe_num(get("emp_rt_dq", inherits=TRUE)) else NA_real_
     unemp_rt_cur <- if (exists("unemp_rt_cur", inherits = TRUE)) safe_num(get("unemp_rt_cur", inherits=TRUE)) else NA_real_
@@ -264,7 +263,7 @@ generate_summary <- function() {
     yu_phrase <- if (isTRUE(yu$is_largest_since_2022)) "the largest increase since November 2022" else "a large increase"
     line6 <- ""  # sl6 not required
 
-    # payroll by age monthly drops
+    # payroll by age - monthly drops
     pa <- calc_payroll_age_drops()
     if (is.null(pa$a1) || length(pa$a1) == 0 || is.na(pa$a1)) pa$a1 <- "age group"
     if (is.null(pa$a2) || length(pa$a2) == 0 || is.na(pa$a2)) pa$a2 <- "age group"
@@ -280,7 +279,7 @@ generate_summary <- function() {
       "In contrast, monthly payrolled employees ", pa_dir1, " by ", fmt_k_abs(pa$d1), "k for ", pa$a1, ", followed by ", pa$a2, " (", pa_dir2, " by ", fmt_k_abs(pa$d2), "k) and ", pa$a3, " (", pa_dir3, " by ", fmt_k_abs(pa$d3), "k)."
     )
     
-    # wages
+    # wages line
     latest_wages <- if (exists("latest_wages", inherits = TRUE)) safe_num(get("latest_wages", inherits=TRUE)) else NA_real_
     latest_regular_cash <- if (exists("latest_regular_cash", inherits = TRUE)) safe_num(get("latest_regular_cash", inherits=TRUE)) else NA_real_
     latest_wages_cpi <- if (exists("latest_wages_cpi", inherits = TRUE)) safe_num(get("latest_wages_cpi", inherits=TRUE)) else NA_real_
@@ -295,7 +294,7 @@ generate_summary <- function() {
       "Wage growth excl. bonuses also ", wages_dir_reg, " to ", fmt_pct(latest_regular_cash), " (", fmt_signed_pp(wages_reg_qchange), "). Real wage growth (inc. bonuses) ", wages_dir_real, " to ", fmt_pct(latest_wages_cpi), "."
     )
     
-    # public vs private (highest growth listed first)
+    # public vs private - highest growth sector goes first
     wages_total_public  <- if (exists("wages_total_public",  inherits = TRUE)) safe_num(get("wages_total_public",  inherits=TRUE)) else NA_real_
     wages_total_private <- if (exists("wages_total_private", inherits = TRUE)) safe_num(get("wages_total_private", inherits=TRUE)) else NA_real_
     first_sector <- ifelse(is.na(wages_total_public) || is.na(wages_total_private) || wages_total_public >= wages_total_private, "public sector", "private sector")
@@ -306,7 +305,7 @@ generate_summary <- function() {
       "Pay growth was driven by the ", first_sector, " (", fmt_pct(first_val), "), compared to ", fmt_pct(second_val), " in the ", second_sector, "."
     )
     
-    # redundancies and hr1
+    # redundancies (lfs) and hr1 notifications
     redund_cur <- if (exists("redund_cur", inherits = TRUE)) safe_num(get("redund_cur", inherits=TRUE)) else NA_real_
     redund_dq <- if (exists("redund_dq", inherits = TRUE)) safe_num(get("redund_dq", inherits=TRUE)) else NA_real_
     hr1_dm <- if (exists("hr1_dm", inherits = TRUE)) safe_num(get("hr1_dm", inherits=TRUE)) else NA_real_

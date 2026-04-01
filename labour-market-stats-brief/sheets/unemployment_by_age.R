@@ -1,5 +1,4 @@
-# unemployment by age
-# table: ons.labour_market_unemployment
+# unemployment by age from ons.labour_market_unemployment
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -26,7 +25,7 @@ FROM "ons"."labour_market_unemployment"')
   finally = DBI::dbDisconnect(conn))
 }
 
-# "mar-may 1992" -> 1992-05-01 (end month)
+# parse "mar-may 1992" to end-month date (1992-05-01)
 parse_lfs_period_to_end_date <- function(label) {
   if (is.na(label) || !nzchar(label)) return(NA)
   label <- trimws(label)

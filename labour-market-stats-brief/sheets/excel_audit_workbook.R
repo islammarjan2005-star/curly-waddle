@@ -1,16 +1,14 @@
-# excel_audit_workbook.R
+# builds the excel audit workbook with live formulas and comparison rows
 
 suppressPackageStartupMessages({
   library(openxlsx)
-  library(readxl)
-  library(lubridate)
 })
 
 if (!exists("parse_manual_month", inherits = TRUE)) source("utils/helpers.R")
 if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
+source("utils/excel_helpers.R", local = FALSE)
 
-# helpers
-
+# ons suppression markers ([x], [c], etc.) get coerced to na during numeric conversion
 .safe_read <- function(path, sheet, ...) {
   if (is.null(path)) return(data.frame())
   tbl <- tryCatch(
@@ -19,81 +17,32 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   )
   if (nrow(tbl) == 0) return(tbl)
 
-  # ons suppression markers treated as NA (not text)
   ons_markers <- c("[x]", "[c]", "[z]", "..", "-", "~", ":", "[e]", "**",
                    "[x] ", " [x]", "[c] ", " [c]")
 
-  # save original text before numeric coercion so headers/codes survive
+  # keep raw text so we can restore suppression markers and headers later
   raw_text <- lapply(seq_len(ncol(tbl)), function(ci) as.character(tbl[[ci]]))
-  
+
   for (ci in seq_len(ncol(tbl))) {
     vals <- tbl[[ci]]
     if (!is.character(vals)) next
-    
+
     trimmed <- trimws(vals)
     num_vals <- suppressWarnings(as.numeric(vals))
-    
+
     is_empty   <- is.na(vals) | nchar(trimmed) == 0
     is_marker  <- trimmed %in% ons_markers
     is_numeric <- !is.na(num_vals) & !is_empty
-    
+
     n_non_empty <- sum(!is_empty)
     n_data_vals <- sum(is_numeric | is_marker)
-    
+
     if (n_non_empty > 0 && n_data_vals / n_non_empty > 0.5) {
       tbl[[ci]] <- num_vals
     }
   }
   attr(tbl, "raw_text") <- raw_text
   tbl
-}
-
-.detect_dates <- function(x) {
-  if (inherits(x, "Date")) return(floor_date(as.Date(x), "month"))
-  if (inherits(x, c("POSIXct", "POSIXt"))) return(floor_date(as.Date(x), "month"))
-  s <- as.character(x)
-  num <- suppressWarnings(as.numeric(s))
-  is_num <- !is.na(num) & grepl("^[0-9]+\\.?[0-9]*$", s)
-  out <- rep(as.Date(NA), length(s))
-  if (any(is_num)) out[is_num] <- as.Date(num[is_num], origin = "1899-12-30")
-  if (any(!is_num)) {
-    out[!is_num] <- suppressWarnings(
-      lubridate::parse_date_time(
-        s[!is_num],
-        orders = c("ymd", "mdy", "dmy", "bY", "BY", "Y b", "b Y", "Ym", "my")
-      )
-    )
-  }
-  floor_date(as.Date(out), "month")
-}
-
-.lfs_label <- function(end_date) {
-  start_date <- end_date %m-% months(2)
-  sprintf("%s-%s %s", format(start_date, "%b"), format(end_date, "%b"), format(end_date, "%Y"))
-}
-
-.find_row <- function(tbl, label) {
-  if (nrow(tbl) == 0 || ncol(tbl) == 0) return(NA_integer_)
-  col1 <- trimws(as.character(tbl[[1]]))
-  idx <- which(tolower(col1) == tolower(trimws(label)))
-  if (length(idx) == 0) NA_integer_ else idx[1]
-}
-
-.cell_num <- function(tbl, row, col) {
-  if (is.na(row) || row < 1 || row > nrow(tbl) || col > ncol(tbl)) return(NA_real_)
-  suppressWarnings(as.numeric(gsub("[^0-9.eE+-]", "", as.character(tbl[[col]][row]))))
-}
-
-.val_by_date <- function(df_m, df_v, target_date) {
-  idx <- which(df_m == target_date)
-  if (length(idx) == 0) return(NA_real_)
-  df_v[idx[1]]
-}
-
-.avg_by_dates <- function(df_m, df_v, target_dates) {
-  vals <- vapply(target_dates, function(d) .val_by_date(df_m, df_v, d), numeric(1))
-  if (any(is.na(vals))) return(NA_real_)
-  mean(vals)
 }
 
 .first_num_r <- function(tbl, col) {
@@ -125,7 +74,7 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   }
 }
 
-# strip ons header/footnote rows — keeps rows with any numeric value in cols 2+
+# strip ons header/footnote rows, keep only rows with actual data
 .trim_source <- function(tbl) {
   if (ncol(tbl) < 2) return(tbl)
   num_cols <- which(vapply(tbl, is.numeric, logical(1)))
@@ -136,7 +85,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   tbl[rows[1]:rows[length(rows)], , drop = FALSE]
 }
 
-# style helpers
 .hs <- function() createStyle(fontName = "Arial", fontSize = 10, fontColour = "#FFFFFF",
                               fgFill = "#366092", halign = "center", textDecoration = "bold",
                               border = "TopBottomLeftRight", borderColour = "#244062")
@@ -147,7 +95,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
 .sep <- function() createStyle(fontSize = 16, textDecoration = "bold", fontColour = "#1F4E79",
                                fgFill = "#BDD7EE", halign = "center", valign = "center")
 
-# comparison row styles
 .cmp_label <- function() createStyle(fontName = "Arial", fontSize = 10, textDecoration = "bold",
                                      fgFill = "#EAF3FB")
 .cmp_sep   <- function() createStyle(border = "Bottom", borderColour = "#2F5496", borderStyle = "medium",
@@ -163,8 +110,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
 .data_font <- function() createStyle(fontName = "Arial", fontSize = 10)
 
 
-# formula helpers
-
 .col_letter <- function(n) {
   result <- ""
   while (n > 0) {
@@ -175,7 +120,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   result
 }
 
-# find output row for a text label
 .find_output_row <- function(tbl, date_col, target_label, data_start_row) {
   col_vals <- trimws(as.character(tbl[[date_col]]))
   idx <- which(tolower(col_vals) == tolower(trimws(target_label)))
@@ -190,92 +134,75 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   idx[1] + data_start_row - 1
 }
 
-# last numeric value in column (COUNT ignores restored text markers)
+# count ignores restored text markers
 .fml_last <- function(cl, sr, off = 0) {
   rng <- sprintf("%s$%d:%s$1048576", cl, sr, cl)
   if (off == 0) sprintf("INDEX(%s,COUNT(%s))", rng, rng)
   else sprintf("INDEX(%s,COUNT(%s)%+d)", rng, rng, off)
 }
 
-# average of last n values
 .fml_avg_last <- function(cl, sr, n = 3) {
   rng <- sprintf("%s$%d:%s$1048576", cl, sr, cl)
   sprintf("AVERAGE(OFFSET(INDEX(%s,COUNT(%s)),-%d,0,%d,1))", rng, rng, n - 1, n)
 }
 
-# average at offset from end
 .fml_avg_offset <- function(cl, sr, off, n = 3) {
   rng <- sprintf("%s$%d:%s$1048576", cl, sr, cl)
   sprintf("AVERAGE(OFFSET(INDEX(%s,COUNT(%s)),%d,0,%d,1))", rng, rng, off, n)
 }
 
-# change vs offset average
 .fml_change_avg <- function(cl, sr, off) {
   paste0(.fml_avg_last(cl, sr), "-", .fml_avg_offset(cl, sr, off))
 }
 
-# change vs fixed row range
 .fml_change_fixed <- function(cl, sr, r1, r2) {
   sprintf("%s-AVERAGE(%s$%d:%s$%d)", .fml_avg_last(cl, sr), cl, r1, cl, r2)
 }
 
-# change vs single fixed row
 .fml_change_single <- function(cl, sr, r) {
   sprintf("%s-%s$%d", .fml_last(cl, sr), cl, r)
 }
 
-# % change vs offset average
 .fml_pct_avg <- function(cl, sr, off) {
   sprintf("IFERROR(%s/%s-1,\"\")", .fml_avg_last(cl, sr), .fml_avg_offset(cl, sr, off))
 }
 
-# % change vs fixed row range
 .fml_pct_fixed <- function(cl, sr, r1, r2) {
   sprintf("IFERROR(%s/AVERAGE(%s$%d:%s$%d)-1,\"\")", .fml_avg_last(cl, sr), cl, r1, cl, r2)
 }
 
-# index change
 .fml_idx_change <- function(cl, sr, off) {
   sprintf("%s-%s", .fml_last(cl, sr), .fml_last(cl, sr, -off))
 }
 
-# index % change
 .fml_idx_pct <- function(cl, sr, off) {
   sprintf("IFERROR(%s/%s-1,\"\")", .fml_last(cl, sr), .fml_last(cl, sr, -off))
 }
 
-# index change vs fixed row
 .fml_idx_change_fixed <- function(cl, sr, r) {
   sprintf("%s-%s$%d", .fml_last(cl, sr), cl, r)
 }
 
-# index % vs fixed row
 .fml_idx_pct_fixed <- function(cl, sr, r) {
   sprintf("IFERROR(%s/%s$%d-1,\"\")", .fml_last(cl, sr), cl, r)
 }
 
-# max of column
 .fml_max <- function(cl, sr) {
   sprintf("MAX(%s$%d:%s$1048576)", cl, sr, cl)
 }
 
-# rank
 .fml_rank <- function(cell, range_start, range_end) {
   sprintf("RANK(%s,%s:%s)", cell, range_start, range_end)
 }
 
-# average of fixed range
 .fml_avg_range <- function(cl, r1, r2) {
   sprintf("AVERAGE(%s$%d:%s$%d)", cl, r1, cl, r2)
 }
 
-# write formula cell
 .wf <- function(wb, sn, formula, row, col) {
   writeFormula(wb, sn, formula, startRow = row, startCol = col)
 }
 
-
-# sheet writing helpers
 
 .write_source_sheet <- function(wb, sheet_name, source_path, source_sheet,
                                 tab_colour = "#2F5496", start_row = 1,
@@ -324,7 +251,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   invisible(tbl)
 }
 
-# write comparison header rows
 .write_cmp_rows <- function(wb, sheet_name, labels, values_matrix, start_row = 1,
                             col_offset = 1) {
   for (i in seq_along(labels)) {
@@ -348,7 +274,7 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
            gridExpand = TRUE, stack = TRUE)
 }
 
-# detect sheet name from a cla01 or x02 file
+# ons files have inconsistent sheet names, try common variants
 .detect_sheet <- function(path, candidates) {
   if (is.null(path)) return(NULL)
   sheets <- tryCatch(readxl::excel_sheets(path), error = function(e) character(0))
@@ -372,8 +298,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
 
 
 
-# main function
-
 create_audit_workbook <- function(
     output_path,
     file_a01 = NULL, file_hr1 = NULL, file_x09 = NULL, file_rtisa = NULL,
@@ -391,27 +315,22 @@ create_audit_workbook <- function(
     .write_source_sheet(wb, tgt_sheet, src, src_sheet, tab_colour = tab_col, date_col = date_col, title = title)
   }
   
-  # a01 source sheets
   .ws(file_a01, "22", "22", "#843C0C", date_col = 1, title = "Summary of regional labour market statistics")
 
-  # rtisa source sheets
   .ws(file_rtisa, "6. Employee flows (UK)", "RTI. Employee flows (UK)", "#548235", date_col = 1)
 
-  # hr1 source sheets (1a gets comparison rows later)
+  # 1a gets comparison rows later, so skip it here
   hr1_titles <- list("1b" = "HR1 - Redundancy notifications by region",
                      "2a" = "HR1 - Redundancy notifications by industry",
                      "2b" = "HR1 - Redundancy notifications by industry (cont.)")
   for (s in c("1b", "2a", "2b")) .ws(file_hr1, s, s, "#C00000", date_col = 1, title = hr1_titles[[s]])
   
-  # cla01
   cla_sheet <- .detect_sheet(file_cla01, c("1", "People SA", "People", "People_SA", "Sheet1", "CLA01"))
   if (!is.null(cla_sheet)) .ws(file_cla01, cla_sheet, "1 UK", "#2F5496")
 
-  # x02
   x02_sheet <- .detect_sheet(file_x02, c("LFS Labour market flows SA", "People SA", "1"))
   if (!is.null(x02_sheet)) .ws(file_x02, x02_sheet, "LFS Labour market flows SA", "#2F5496")
 
-  # oecd files
   for (oecd_info in list(
     list(file = file_oecd_unemp, name = "Unemployment"),
     list(file = file_oecd_emp,   name = "Employment"),
@@ -420,7 +339,7 @@ create_audit_workbook <- function(
     if (!is.null(oecd_info$file)) {
       ext <- tolower(tools::file_ext(oecd_info$file))
       if (ext == "csv") {
-        # OECD CSV downloads are in SDMX long format — pivot to wide (countries x time)
+        # oecd csvs come in sdmx long format, need to pivot to wide
         csv_data <- tryCatch(read.csv(oecd_info$file, stringsAsFactors = FALSE),
                              error = function(e) data.frame())
         if (nrow(csv_data) > 0) {
@@ -431,7 +350,7 @@ create_audit_workbook <- function(
             ref_col  <- intersect(c("Reference.area", "REF_AREA"), names(csv_data))[1]
             time_col <- intersect(c("Time.period", "TIME_PERIOD"), names(csv_data))[1]
             val_col  <- intersect(c("OBS_VALUE", "Observation.value"), names(csv_data))[1]
-            # pivot sdmx: rows = country, cols = period
+            # pivot: rows = country, cols = period
             countries <- unique(csv_data[[ref_col]])
             periods   <- sort(unique(csv_data[[time_col]]))
             wide_df <- data.frame(Country = countries, stringsAsFactors = FALSE)
@@ -506,7 +425,6 @@ create_audit_workbook <- function(
     m_5064 <- m_5064rt <- na_m
   }
   
-  # vacancies
   vac_m <- na_m
   if (nrow(tbl_19) > 0 && ncol(tbl_19) >= 3) {
     vac_m$cur <- .cell_num(tbl_19, .find_row(tbl_19, lab_cur), 3)
@@ -516,7 +434,6 @@ create_audit_workbook <- function(
     vac_m$de  <- vac_m$cur - .cell_num(tbl_19, .find_row(tbl_19, .lfs_label(ELEC24_DATE)), 3)
   }
   
-  # payroll
   pay_m <- na_m
   rtisa_pay <- .safe_read(file_rtisa, "1. Payrolled employees (UK)")
   if (nrow(rtisa_pay) > 0 && ncol(rtisa_pay) >= 2) {
@@ -545,7 +462,6 @@ create_audit_workbook <- function(
     }
   }
   
-  # Wages nominal
   wages_m <- na_m
   tbl_13 <- .trim_source(.safe_read(file_a01, "13"))
   if (nrow(tbl_13) > 0 && ncol(tbl_13) >= 4) {
@@ -564,7 +480,6 @@ create_audit_workbook <- function(
     wages_m$de <- .wc(win3, seq(ELEC24_DATE %m-% months(2), by = "month", length.out = 3))
   }
   
-  # wages cpi
   wages_cpi_m <- na_m
   tbl_cpi <- .safe_read(file_x09, "AWE Real_CPI")
   if (nrow(tbl_cpi) > 0 && ncol(tbl_cpi) >= 9) {
@@ -586,16 +501,13 @@ create_audit_workbook <- function(
   }
   
 
-  # complex sheets with comparison rows
-
-  # rtisa
+  # --- rtisa: payrolled employees ---
   if (!is.null(file_rtisa)) {
     tbl_rtisa <- .safe_read(file_rtisa, "1. Payrolled employees (UK)")
     if (nrow(tbl_rtisa) > 0) {
       sn <- "1. Payrolled employees (UK)"
       addWorksheet(wb, sn, tabColour = "#548235")
       
-      # Write original data from row 5
       writeData(wb, sn, tbl_rtisa, colNames = FALSE, startRow = 5)
       .restore_text(wb, sn, tbl_rtisa, 5)
       addStyle(wb, sn, .data_font(), rows = 5:(5 + nrow(tbl_rtisa)),
@@ -603,18 +515,15 @@ create_audit_workbook <- function(
       setColWidths(wb, sn, cols = 1, widths = 18)
       setColWidths(wb, sn, cols = 2:max(ncol(tbl_rtisa), 10), widths = 18)
       
-      # Find data start row: first row with a parseable date in col A
       rtisa_text <- trimws(as.character(tbl_rtisa[[1]]))
       rtisa_date_rows <- which(grepl("^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{4}$", rtisa_text, ignore.case = TRUE))
       dsr <- if (length(rtisa_date_rows) > 0) rtisa_date_rows[1] + 4 else 11  # output row
       
-      # Find baseline rows dynamically
       covid_r <- .find_output_row(tbl_rtisa, 1, "December 2019", 5)
       elec_r  <- .find_output_row(tbl_rtisa, 1, "July 2024", 5)
       office_r <- elec_r  # "coming into office" = July 2024
       cl <- "$B"
       
-      # Header row 1
       hdrs <- c("Current", "Change on month (singular)", "Change on quarter",
                 "Change year on year", "Change since Covid-19",
                 "Change since 2024 election", "Change since coming into office",
@@ -624,7 +533,7 @@ create_audit_workbook <- function(
         addStyle(wb, sn, .hs(), rows = 1, cols = ci + 1, stack = TRUE)
       }
       
-      # Row 2: Number (formulas)
+      # row 2: number formulas, row 3: % formulas
       writeData(wb, sn, "Number", startRow = 2, startCol = 1)
       addStyle(wb, sn, .cmp_label(), rows = 2, cols = 1, stack = TRUE)
       .wf(wb, sn, .fml_avg_last(cl, dsr), 2, 2)                                    # Current
@@ -634,11 +543,9 @@ create_audit_workbook <- function(
       if (!is.na(covid_r)) .wf(wb, sn, .fml_change_fixed(cl, dsr, covid_r, covid_r + 2), 2, 6) # Covid
       if (!is.na(elec_r)) .wf(wb, sn, .fml_change_fixed(cl, dsr, elec_r, elec_r + 2), 2, 7)   # 2024 election
       if (!is.na(office_r)) .wf(wb, sn, .fml_change_single(cl, dsr, office_r), 2, 8)           # Coming into office
-      # Start of year: use XLOOKUP
       .wf(wb, sn, sprintf('%s-_xlfn.XLOOKUP("January "&TEXT(TODAY(),"yyyy"),A$%d:A$1048576,B$%d:B$1048576)', .fml_last("B", dsr), dsr, dsr), 2, 9)
       .wf(wb, sn, .fml_max(cl, dsr), 2, 10)                                          # Max
       
-      # Row 3: % (formulas)
       writeData(wb, sn, "%", startRow = 3, startCol = 1)
       addStyle(wb, sn, .cmp_label(), rows = 3, cols = 1, stack = TRUE)
       .wf(wb, sn, sprintf("IFERROR(%s/%s-1,\"\")", .fml_last(cl, dsr), .fml_last(cl, dsr, -1)), 3, 3) # Month %
@@ -655,31 +562,28 @@ create_audit_workbook <- function(
     }
   }
   
-  # --- RTISA: 23. Employees Industry ---
+  # --- rtisa: 23. employees industry ---
   if (!is.null(file_rtisa)) {
     tbl_23 <- .safe_read(file_rtisa, "23. Employees (Industry)")
     if (nrow(tbl_23) > 0 && ncol(tbl_23) >= 2) {
       sn <- "23. Employees Industry"
       addWorksheet(wb, sn, tabColour = "#548235")
       
-      # Write original data from row 5
       writeData(wb, sn, tbl_23, colNames = FALSE, startRow = 5)
       .restore_text(wb, sn, tbl_23, 5)
       addStyle(wb, sn, .data_font(), rows = 5:(5 + nrow(tbl_23)),
                cols = 1:ncol(tbl_23), gridExpand = TRUE, stack = TRUE)
       
-      # Find data start row (first row with date values in col A)
       ind_dates <- .detect_dates(tbl_23[[1]])
       ind_valid <- which(!is.na(ind_dates))
-      max_ci <- min(ncol(tbl_23), 21)  # Up to col U (20 industries)
+      max_ci <- min(ncol(tbl_23), 21)  # up to col u (20 industries)
       
       if (length(ind_valid) > 0) {
         dsr <- ind_valid[1] + 4  # output row where data starts (offset by row 5 base)
         
-        # Header row 1: "Yearly change" + industry names from source
         writeData(wb, sn, "Yearly change", startRow = 1, startCol = 1)
         addStyle(wb, sn, .hs(), rows = 1, cols = 1, stack = TRUE)
-        # Find the header row in source data (usually right before data starts)
+        # header row is right before data starts
         hdr_src <- ind_valid[1] - 1
         for (ci in 2:max_ci) {
           header_val <- as.character(tbl_23[[ci]][hdr_src])
@@ -689,7 +593,7 @@ create_audit_workbook <- function(
           }
         }
         
-        # Row 2: Number (yearly change), Row 3: % change — using formulas
+        # row 2: number (yearly change), row 3: % change, row 4: rank
         writeData(wb, sn, "Number", startRow = 2, startCol = 1)
         writeData(wb, sn, "%", startRow = 3, startCol = 1)
         writeData(wb, sn, "Rank", startRow = 4, startCol = 1)
@@ -697,12 +601,9 @@ create_audit_workbook <- function(
         
         for (ci in 2:max_ci) {
           cl <- .col_letter(ci)
-          # Number: last - year_ago (12 months offset)
           .wf(wb, sn, .fml_idx_change(cl, dsr, 12), 2, ci)
-          # %: last / year_ago - 1
           .wf(wb, sn, .fml_idx_pct(cl, dsr, 12), 3, ci)
         }
-        # Row 4: Rank based on Number row values
         last_cl <- .col_letter(max_ci)
         for (ci in 2:max_ci) {
           cl <- .col_letter(ci)
@@ -716,22 +617,20 @@ create_audit_workbook <- function(
     }
   }
   
-  # --- A01 Sheet "2": Age breakdown with comparisons ---
+  # --- a01 sheet "2": age breakdown with comparisons ---
   if (!is.null(file_a01)) {
     tbl_2_full <- .trim_source(.safe_read(file_a01, "2"))
     if (nrow(tbl_2_full) > 0 && ncol(tbl_2_full) >= 10) {
       sn <- "2"
       addWorksheet(wb, sn, tabColour = "#2F5496")
 
-      # Use all available source columns (covers all age groups)
       s2_ncol <- ncol(tbl_2_full)
 
-      # Row 1: sheet title
       writeData(wb, sn, "LFS: Employment, unemployment and inactivity by age group", startRow = 1, startCol = 1)
       addStyle(wb, sn, .ts(), rows = 1, cols = 1)
       setRowHeights(wb, sn, rows = 1, heights = 28)
 
-      # Age group headers (row 2) — 8 columns per group (4 measures x level/rate)
+      # 8 columns per age group (4 measures x level/rate)
       age_groups_2 <- list(
         list(sc = 2,  name = "Aged 16 and over"),
         list(sc = 10, name = "Aged 16-64"),
@@ -747,7 +646,7 @@ create_audit_workbook <- function(
         }
       }
       
-      # Category headers (row 3) — Employment, Unemployment, Activity, Inactivity per group
+      # row 3: category headers per group
       categories_2 <- c("Employment", "Unemployment", "Activity", "Inactivity")
       for (ag in age_groups_2) {
         for (j in seq_along(categories_2)) {
@@ -758,20 +657,19 @@ create_audit_workbook <- function(
         }
       }
       
-      # Level/rate subheaders (row 4)
+      # row 4: level/rate subheaders
       for (ci in seq(2, s2_ncol, by = 2)) {
         writeData(wb, sn, "level", startRow = 4, startCol = ci)
         if (ci + 1 <= s2_ncol) writeData(wb, sn, "rate (%)", startRow = 4, startCol = ci + 1)
       }
       addStyle(wb, sn, .hs(), rows = 2:4, cols = 2:s2_ncol, gridExpand = TRUE, stack = TRUE)
       
-      # Comparison data rows 5-10 — live array formulas matching Feb file pattern
+      # rows 5-10: comparison formulas matching feb file pattern
       s2_dsr <- 11  # data start row in output
       cmp_labels <- c("Current", "Quarterly change", "Change year on year",
                       "Change since Covid (Dec 19-Feb 20)",
                       "Change since 2010 election", "Change since 2024 election")
 
-      # Dynamic baseline rows
       s2_covid_row  <- .find_output_row(tbl_2_full, 1, lab_covid,       s2_dsr)
       s2_elec10_row <- .find_output_row(tbl_2_full, 1, "Feb-Apr 2010",  s2_dsr)
       s2_elec24_row <- .find_output_row(tbl_2_full, 1, lab_elec,        s2_dsr)
@@ -794,11 +692,10 @@ create_audit_workbook <- function(
         }
       }
       addStyle(wb, sn, .cmp_sep(), rows = 10, cols = 1:s2_ncol, gridExpand = TRUE, stack = TRUE)
-      # Apply comparison background to full rows (so the teal extends across all cols)
+      # teal background across full width of comparison rows
       addStyle(wb, sn, createStyle(fgFill = "#EAF3FB"), rows = 5:10, cols = 1:s2_ncol, gridExpand = TRUE, stack = TRUE)
       setRowHeights(wb, sn, rows = 2:10, heights = 20)
 
-      # Write original data from row 11
       writeData(wb, sn, tbl_2_full, colNames = FALSE, startRow = s2_dsr)
       .restore_text(wb, sn, tbl_2_full, s2_dsr)
       addStyle(wb, sn, .data_font(), rows = s2_dsr:(s2_dsr + nrow(tbl_2_full)),
@@ -808,20 +705,20 @@ create_audit_workbook <- function(
     }
   }
 
-  # --- Sheet1: Unemployment level + rate with comparison formulas ---
+  # --- sheet1: unemployment level + rate with comparison formulas ---
   if (!is.null(file_a01)) {
     tbl_s1_src <- .trim_source(.safe_read(file_a01, "2"))  # pull from A01 sheet 2
     if (nrow(tbl_s1_src) > 0 && ncol(tbl_s1_src) >= 5) {
       sn <- "Sheet1"
       addWorksheet(wb, sn, tabColour = "#2F5496")
 
-      # Headers
+
       writeData(wb, sn, "Unemployment", startRow = 1, startCol = 2)
       writeData(wb, sn, "level",        startRow = 2, startCol = 2)
       writeData(wb, sn, "rate (%)",     startRow = 2, startCol = 3)
       addStyle(wb, sn, .hs(), rows = 1:2, cols = 2:3, gridExpand = TRUE, stack = TRUE)
 
-      # Extract date labels and values from A01 sheet 2 (col 1 = date, col 5 = unemp level, col 6 = rate)
+      # col 1 = date, col 5 = unemp level, col 6 = rate
       s1_labels <- trimws(as.character(tbl_s1_src[[1]]))
       lfs_pat_s1 <- "^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}$"
       s1_data_rows <- which(grepl(lfs_pat_s1, s1_labels, ignore.case = TRUE))
@@ -837,7 +734,7 @@ create_audit_workbook <- function(
           if (!is.na(rt)) writeData(wb, sn, rt, startRow = out_r, startCol = 3)
         }
         last_data_row <- length(s1_data_rows) + 2
-        # Comparison columns D (level) and E (rate): LOWER / HIGHER vs latest
+        # d (level) and e (rate): lower / higher vs latest
         for (k in seq_along(s1_data_rows)) {
           out_r <- k + 2
           writeFormula(wb, sn,
@@ -855,24 +752,23 @@ create_audit_workbook <- function(
     }
   }
 
-  # --- A01 Sheet "3": direct copy ---
+  # --- a01 sheet "3": direct copy ---
   if (!is.null(file_a01)) {
     .ws(file_a01, "3", "3", "#2F5496", date_col = 1)
   }
 
-  # --- A01 Sheet "5": Workforce jobs ---
+  # --- a01 sheet "5": workforce jobs ---
   if (!is.null(file_a01)) {
     tbl_5 <- .trim_source(.safe_read(file_a01, "5"))
     if (nrow(tbl_5) > 0) {
       sn <- "5"
       addWorksheet(wb, sn, tabColour = "#2F5496")
 
-      # Row 1: title
       writeData(wb, sn, "Workforce Jobs", startRow = 1, startCol = 1)
       addStyle(wb, sn, .ts(), rows = 1, cols = 1)
       setRowHeights(wb, sn, rows = 1, heights = 28)
 
-      # Write original data from row 7 first (need it for formula references)
+      # need data written first so formulas can reference it
       writeData(wb, sn, tbl_5, colNames = FALSE, startRow = 7)
       .restore_text(wb, sn, tbl_5, 7)
       addStyle(wb, sn, .data_font(), rows = 7:(7 + nrow(tbl_5)),
@@ -880,7 +776,7 @@ create_audit_workbook <- function(
       setColWidths(wb, sn, cols = 1, widths = 32)
       setColWidths(wb, sn, cols = 2:6, widths = 18)
       
-      # Headers row 2 (row 1 blank per reference)
+      # row 2 headers
       col_hdrs <- c("Workforce jobs", "Employee jobs", "Self-employment jobs",
                     "HM Forces", "Government- supported trainees")
       for (ci in seq_along(col_hdrs)) {
@@ -888,12 +784,11 @@ create_audit_workbook <- function(
         addStyle(wb, sn, .hs(), rows = 2, cols = ci + 1, stack = TRUE)
       }
       
-      # Find data start row in source (first row with "Mon YY" pattern)
+      # find first data row (pattern: "Mon YY")
       s5_col1 <- trimws(as.character(tbl_5[[1]]))
       s5_data_rows <- which(grepl("^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{2}", s5_col1, ignore.case = TRUE))
       s5_newgov_row <- grep("^Jun\\s+24", s5_col1, ignore.case = TRUE)
       
-      # Comparison rows 3-6
       cmp_labels_5 <- c("Current", "Quarterly change", "Max", "Jobs created since new gov")
       for (i in seq_along(cmp_labels_5)) {
         writeData(wb, sn, cmp_labels_5[i], startRow = i + 2, startCol = 1)
@@ -906,13 +801,9 @@ create_audit_workbook <- function(
 
         for (ci in 2:min(ncol(tbl_5), 6)) {
           cl <- .col_letter(ci)
-          # Row 3: Current — last value formula
-          .wf(wb, sn, .fml_last(cl, dsr), 3, ci)
-          # Row 4: Quarterly change — last minus 3 quarters ago
-          .wf(wb, sn, .fml_idx_change(cl, dsr, 3), 4, ci)
-          # Row 5: Max
-          .wf(wb, sn, .fml_max(cl, dsr), 5, ci)
-          # Row 6: Since new gov
+          .wf(wb, sn, .fml_last(cl, dsr), 3, ci)              # current
+          .wf(wb, sn, .fml_idx_change(cl, dsr, 3), 4, ci)    # quarterly change
+          .wf(wb, sn, .fml_max(cl, dsr), 5, ci)              # max
           if (!is.na(newgov_output_r))
             .wf(wb, sn, .fml_idx_change_fixed(cl, dsr, newgov_output_r), 6, ci)
         }
@@ -925,18 +816,16 @@ create_audit_workbook <- function(
     }
   }
 
-  # --- A01 Sheet "10": Redundancy ---
+  # --- a01 sheet "10": redundancy ---
   if (!is.null(file_a01)) {
     tbl_10_full <- .trim_source(.safe_read(file_a01, "10"))
     if (nrow(tbl_10_full) > 0 && ncol(tbl_10_full) >= 6) {
       sn <- "10"
       addWorksheet(wb, sn, tabColour = "#2F5496")
       
-      # Title
       writeData(wb, sn, "Redundancies", startRow = 1, startCol = 1)
       addStyle(wb, sn, .ts(), rows = 1, cols = 1)
       
-      # Headers (shifted down by 1 for title)
       for (pair in list(c(2, "People"), c(4, "Men"), c(6, "Women"))) {
         writeData(wb, sn, pair[2], startRow = 2, startCol = as.integer(pair[1]))
         addStyle(wb, sn, .hs(), rows = 2, cols = as.integer(pair[1]), stack = TRUE)
@@ -947,12 +836,10 @@ create_audit_workbook <- function(
       }
       addStyle(wb, sn, .hs(), rows = 3, cols = 2:7, gridExpand = TRUE, stack = TRUE)
       
-      # Comparison rows — live array formulas for all 6 columns
       cmp_labels_10 <- c("Current", "Quarterly change", "year on year change",
                          "Since pandemic", "Since 2010 election")
       s10_dsr <- 10  # data start row in output
 
-      # Dynamic baseline rows
       s10_covid_row  <- .find_output_row(tbl_10_full, 1, lab_covid,      s10_dsr)
       s10_elec10_row <- .find_output_row(tbl_10_full, 1, "Feb-Apr 2010", s10_dsr)
 
@@ -978,7 +865,6 @@ create_audit_workbook <- function(
       addStyle(wb, sn, createStyle(fgFill = "#EAF3FB"), rows = 4:8, cols = 1:7, gridExpand = TRUE, stack = TRUE)
       setRowHeights(wb, sn, rows = 1:8, heights = 20)
       
-      # Original data from row 10
       writeData(wb, sn, tbl_10_full, colNames = FALSE, startRow = 10)
       .restore_text(wb, sn, tbl_10_full, 10)
       addStyle(wb, sn, .data_font(), rows = 10:(10 + nrow(tbl_10_full)),
@@ -988,7 +874,7 @@ create_audit_workbook <- function(
     }
   }
 
-  # --- A01 Sheet "11": Inactivity by reason ---
+  # --- a01 sheet "11": inactivity by reason ---
   if (!is.null(file_a01)) {
     tbl_11 <- .trim_source(.safe_read(file_a01, "11"))
     if (nrow(tbl_11) > 0 && ncol(tbl_11) >= 6) {
@@ -996,7 +882,7 @@ create_audit_workbook <- function(
       addWorksheet(wb, sn, tabColour = "#2F5496")
       max_col_11 <- min(ncol(tbl_11), 21)
       
-      # Row 1: Group headers
+      # row 1: group headers
       writeData(wb, sn, "Economic inactivity by reason (thousands)", startRow = 1, startCol = 3)
       addStyle(wb, sn, .hs(), rows = 1, cols = 3, stack = TRUE)
       if (max_col_11 >= 13) {
@@ -1004,7 +890,7 @@ create_audit_workbook <- function(
         addStyle(wb, sn, .hs(), rows = 1, cols = 13, stack = TRUE)
       }
       
-      # Row 2: Column sub-headers
+      # row 2: column sub-headers
       reason_hdrs_11 <- c(
         "Total economically inactive aged 16-64 (thousands)4",
         "Student", "Looking after family / home", "Temp sick", "Long-term sick",
@@ -1023,7 +909,7 @@ create_audit_workbook <- function(
         }
       }
       
-      # Comparison row labels (rows 3-7)
+
       cmp_labels_11 <- c("Current", "Quarterly change", "year on year change",
                          "Since pandemic", "Since 2010 election")
       for (i in seq_along(cmp_labels_11)) {

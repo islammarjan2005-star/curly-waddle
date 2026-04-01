@@ -1,4 +1,4 @@
-# inactivity reasons module - a01 sheet 11
+# inactivity reasons - a01 sheet 11
 
 INACT_REASON_CODES <- list(
   STUDENT        = "LF63",

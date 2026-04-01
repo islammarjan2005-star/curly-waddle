@@ -1,4 +1,4 @@
-# days lost module - a01 sheet 18 (working days lost)
+# working days lost to labour disputes - a01 sheet 18
 
 DAYS_LOST_CODE <- "BBFW"
 

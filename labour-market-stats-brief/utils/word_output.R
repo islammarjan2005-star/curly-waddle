@@ -1,8 +1,7 @@
-# word_output.R - generate word output from database calculations
+# generate word output from database calculations
 
 source("utils/word_helpers.R", local = FALSE)
 
-# fetch oecd data from database
 .fetch_oecd_from_db <- function(verbose = TRUE) {
   if (!requireNamespace("DBI", quietly = TRUE) || !requireNamespace("RPostgres", quietly = TRUE)) {
     if (verbose) message("[word_output] DBI/RPostgres not available for OECD data")
@@ -65,7 +64,7 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
   source(config_path, local = FALSE)
   if (!is.null(manual_month_override)) manual_month <<- tolower(manual_month_override)
 
-  # set vac/payroll modes
+  # apply mode overrides (latest vs aligned)
   if (!is.null(vac_payroll_mode_override) && is.null(vacancies_mode_override) && is.null(payroll_mode_override)) {
     mode <- tolower(as.character(vac_payroll_mode_override))
     mode <- if (mode %in% c("latest", "aligned")) mode else "latest"
@@ -82,7 +81,7 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
   source(calculations_path, local = FALSE)
   if (verbose && exists("manual_month", inherits = TRUE)) message("[word_output] manual_month = ", manual_month)
 
-  # save dashboard vac values, then re-run with "latest" for narrative text
+  # narrative always uses latest vacancies, but dashboard keeps the dropdown selection
   saved_vac       <- list(cur = vac_cur, dq = vac_dq, dy = vac_dy, dc = vac_dc, de = vac_de)
   saved_vac_obj   <- if (exists("vac", inherits = TRUE)) get("vac", inherits = TRUE) else NULL
   saved_vac_label <- if (exists("vacancies_period_short_label", inherits = TRUE)) vacancies_period_short_label else NULL
@@ -101,7 +100,7 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
   summary <- tryCatch(generate_summary(),  error = function(e) { warning("generate_summary() failed: ", e$message);  fallback_lines() })
   top10   <- tryCatch(generate_top_ten(),  error = function(e) { warning("generate_top_ten() failed: ", e$message);  fallback_lines() })
 
-  # restore dropdown-selected vac values for template filling
+  # restore dashboard vac values for template filling
   vac_cur <<- saved_vac$cur; vac_dq <<- saved_vac$dq; vac_dy <<- saved_vac$dy
   vac_dc  <<- saved_vac$dc;  vac_de <<- saved_vac$de
   if (!is.null(saved_vac_obj))   vac                       <<- saved_vac_obj
@@ -109,11 +108,10 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
 
   doc <- read_docx(template_path)
 
-  # Replace contact names in header
   contact <- if (!is.null(contact_names) && nzchar(contact_names)) contact_names else ""
   doc <- replace_all(doc, "qvzcontact", contact)
 
-  # header placeholders (qvz convention for ManualDB.docx)
+  # header placeholders
   title_label <- if (exists("manual_month", inherits = TRUE)) manual_month_to_label(manual_month) else ""
   doc <- replace_all(doc, "qvzmonthlabel", title_label)
   doc <- replace_all(doc, "qvzrenderdate", format(Sys.Date(), "%d %B %Y"))
@@ -125,11 +123,11 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
   }
   if (exists("payroll_period_short_label",  inherits = TRUE)) doc <- replace_all(doc, "qozpayperiod", payroll_period_short_label)
 
-  # summary & top ten lines
+  # summary and top ten lines
   for (i in 1:10) doc <- replace_all(doc, sprintf("qvzsl%02d", i), summary[[paste0("line", i)]])
   for (i in 1:10) doc <- replace_all(doc, sprintf("qvztt%02d", i), top10[[paste0("line", i)]])
 
-  # current values
+  # current values column
   doc <- replace_all(doc, "qvzempcur",  fmt_count_000s_current(emp16_cur))
   doc <- replace_all(doc, "qvzertcur",  .format_pct(emp_rt_cur))
   doc <- replace_all(doc, "qvzunecur",  fmt_count_000s_current(unemp16_cur))
@@ -265,14 +263,14 @@ generate_word_output <- function(template_path = "utils/ManualDB.docx",
     }
   }
 
-  # OECD international comparisons (fetched from database)
+  # oecd international comparisons
   oecd_data <- .fetch_oecd_from_db(verbose = verbose)
   if (!is.null(oecd_data$unemp) || !is.null(oecd_data$emp) || !is.null(oecd_data$inact)) {
     doc <- .fill_oecd_placeholders(doc, oecd_data$unemp, oecd_data$emp, oecd_data$inact)
     if (verbose) message("[word_output] OECD comparison table populated from database")
   }
 
-  # clear any unfilled qvz placeholders with em-dash
+  # replace any unfilled qvz placeholders with em-dash so nothing looks broken
   body_xml   <- doc$doc_obj$get()
   ns         <- xml2::xml_ns(body_xml)
   text_nodes <- xml2::xml_find_all(body_xml, ".//w:t", ns = ns)

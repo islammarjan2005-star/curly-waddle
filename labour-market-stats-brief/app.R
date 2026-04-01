@@ -1,18 +1,12 @@
-# labour market statistics brief - shiny application
-
 library(shiny)
 
-# ui - gov.uk design system
-
 ui <- fluidPage(
-  
-  # page title
+
   tags$head(
     tags$title("Labour Market Statistical Briefing"),
     tags$meta(charset = "utf-8"),
     tags$meta(name = "viewport", content = "width=device-width, initial-scale=1"),
     
-    # gov.uk design system css
     tags$style(HTML("
       @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap');
 
@@ -265,7 +259,6 @@ ui <- fluidPage(
 
       .container-fluid { padding: 0 !important; margin: 0 !important; max-width: none !important; }
 
-      /* Month confirmation status */
       .month-status {
         display: inline-block;
         padding: 5px 10px;
@@ -284,7 +277,6 @@ ui <- fluidPage(
         color: #ffffff;
       }
 
-      /* Input row with button */
       .input-row {
         display: flex;
         align-items: flex-end;
@@ -296,7 +288,6 @@ ui <- fluidPage(
         margin-bottom: 0;
       }
 
-      /* Stats table */
       .stats-table {
         width: 100%;
         border-collapse: collapse;
@@ -326,7 +317,6 @@ ui <- fluidPage(
       .stat-negative { color: #d4351c; font-weight: 700; }
       .stat-neutral { color: #505a5f; }
 
-      /* Top Ten List */
       .top-ten-list {
         list-style: none;
         padding: 0;
@@ -358,7 +348,6 @@ ui <- fluidPage(
       .govuk-list { padding-left: 20px; }
       .govuk-list li { margin-bottom: 5px; }
 
-      /* Shiny progress bar customization */
       .shiny-notification {
         position: fixed;
         top: 50%;
@@ -396,7 +385,7 @@ ui <- fluidPage(
         display: none;
       }
 
-      /* Loading spinner (used during auto reference-month detection) */
+      /* spinner */
       .loader {
         border: 4px solid #f3f2f1;
         border-top: 4px solid #1d70b8;
@@ -413,7 +402,6 @@ ui <- fluidPage(
         100% { transform: rotate(360deg); }
       }
 
-      /* Ensure Shiny selectInput matches GOV.UK style */
       #vacancies_period, #payroll_period,
       #manual_vacancies_period, #manual_payroll_period {
         font-size: 19px;
@@ -432,7 +420,7 @@ ui <- fluidPage(
         box-shadow: inset 0 0 0 2px;
       }
 
-      /* GOV.UK-style tabs */
+      /* tabs */
       .nav-pills { display: flex; list-style: none; margin: 0 0 20px 0; padding: 0; border-bottom: 2px solid #b1b4b6; }
       .nav-pills > li { margin: 0; }
       .nav-pills > li > a {
@@ -448,7 +436,7 @@ ui <- fluidPage(
       .govuk-tag--grey { background-color: #b1b4b6; color: #ffffff; }
       .govuk-tag--amber { background-color: #f47738; }
 
-      /* Period toggle buttons */
+      /* period toggle buttons */
       .period-toggle-group { display: inline-flex; border: 2px solid #0b0c0c; margin-right: 20px; margin-bottom: 15px; }
       .period-toggle-group .govuk-button {
         margin: 0; box-shadow: none; border: none; border-right: 1px solid #b1b4b6; border-radius: 0;
@@ -459,7 +447,6 @@ ui <- fluidPage(
     "))
   ),
   
-  # header
   tags$header(class = "govuk-header",
               div(class = "govuk-header__container",
                   div(style = "margin-bottom: 10px;",
@@ -471,7 +458,6 @@ ui <- fluidPage(
               )
   ),
   
-  # main content
   div(class = "govuk-width-container",
       
       div(class = "govuk-phase-banner",
@@ -483,16 +469,15 @@ ui <- fluidPage(
                 
                 h1(class = "govuk-heading-xl", "Labour Market Statistical Briefing Automation"),
                 
-                # tabbed layout: Manual (default) | Automatic
+                # manual vs automatic mode tabs
                 tabsetPanel(id = "mode_tabs", type = "pills", selected = "manual",
                             
-                            # ---- MANUAL TAB ----
+                            # manual tab
                             tabPanel("Manual", value = "manual",
                                      div(class = "dashboard-card", style = "margin-top: 20px;",
                                          div(class = "dashboard-card__header", "Manual (Excel Upload)"),
                                          div(class = "dashboard-card__content",
 
-                                             # --- Reference month & contact ---
                                              div(class = "govuk-form-group",
                                                  tags$label(class = "govuk-label", style = "font-weight:700;", "Reference month"),
                                                  div(class = "govuk-hint", "Type the publication month (e.g. March 2026). Used for ONS download links."),
@@ -509,7 +494,6 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
-                                             # --- Upload ---
                                              div(class = "govuk-form-group",
                                                  fileInput("upload_files", "Upload ONS Excel files",
                                                            accept = c(".xlsx", ".csv"), multiple = TRUE, width = "100%"),
@@ -517,13 +501,11 @@ ui <- fluidPage(
                                                      "Drag or select files. Auto-detected by name: A01, HR1, X09, RTISA, CLA01, X02, OECD.")
                                              ),
 
-                                             # --- File status (all 9 types) ---
                                              uiOutput("upload_status"),
                                              uiOutput("download_all_btn"),
 
                                              tags$hr(class = "govuk-section-break"),
                                              
-                                             # --- Period buttons ---
                                              h2(class = "govuk-heading-m", "Period selection"),
                                              div(
                                                tags$label(class = "govuk-label", style = "font-weight:700;", "Vacancies"),
@@ -536,7 +518,6 @@ ui <- fluidPage(
                                              
                                              tags$hr(class = "govuk-section-break"),
                                              
-                                             # --- Preview buttons ---
                                              h2(class = "govuk-heading-m", "Preview"),
                                              actionButton("manual_preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
                                              actionButton("manual_preview_topten", "Top Ten", class = "govuk-button govuk-button--blue"),
@@ -545,7 +526,6 @@ ui <- fluidPage(
                                              
                                              tags$hr(class = "govuk-section-break"),
                                              
-                                             # --- Download buttons ---
                                              h2(class = "govuk-heading-m", "Download"),
                                              downloadButton("manual_download_word", "Download Word", class = "govuk-button govuk-button--blue"),
                                              downloadButton("manual_download_excel", "Download Excel", class = "govuk-button")
@@ -553,13 +533,12 @@ ui <- fluidPage(
                                      )
                             ),
                             
-                            # ---- AUTOMATIC TAB ----
+                            # automatic tab
                             tabPanel("Automatic", value = "automatic",
                                      div(class = "dashboard-card", style = "margin-top: 20px;",
                                          div(class = "dashboard-card__header", "Automatic (Database)"),
                                          div(class = "dashboard-card__content",
 
-                                             # --- Reference month & contact ---
                                              div(class = "govuk-form-group",
                                                  tags$label(class = "govuk-label", style = "font-weight:700;", "Reference month"),
                                                  div(class = "govuk-hint", "Auto-detected from database. Edit to override."),
@@ -575,7 +554,6 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
-                                             # --- Period buttons ---
                                              h2(class = "govuk-heading-m", "Period selection"),
                                              div(
                                                tags$label(class = "govuk-label", style = "font-weight:700;", "Vacancies"),
@@ -588,7 +566,6 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
-                                             # --- Preview buttons ---
                                              h2(class = "govuk-heading-m", "Preview"),
                                              actionButton("preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
                                              actionButton("preview_topten", "Top Ten", class = "govuk-button govuk-button--blue"),
@@ -597,7 +574,6 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
-                                             # --- Download buttons ---
                                              h2(class = "govuk-heading-m", "Download"),
                                              downloadButton("download_word", "Download Word", class = "govuk-button govuk-button--blue"),
                                              downloadButton("download_excel", "Download Excel", class = "govuk-button")
@@ -608,7 +584,7 @@ ui <- fluidPage(
       )
   ),
   
-  # full-width preview area (stacked so it is readable)
+  # preview area
   div(class = "govuk-width-container govuk-width-container--wide",
       tags$main(class = "govuk-main-wrapper", style = "padding-top: 0;",
                 div(class = "dashboard-card",
@@ -630,7 +606,6 @@ ui <- fluidPage(
       )
   ),
   
-  # footer
   tags$footer(class = "govuk-footer",
               div(class = "govuk-width-container",
                   "Labour Market Statistics Brief Generator | Department for Business and Trade"
@@ -638,11 +613,9 @@ ui <- fluidPage(
   )
 )
 
-# server
-
 server <- function(input, output, session) {
-  
-  # file paths
+
+  # script and template paths
   config_path       <- "utils/config.R"
   calculations_path <- "utils/calculations.R"
   excel_calc_path   <- "utils/calculations_from_excel.R"
@@ -652,7 +625,7 @@ server <- function(input, output, session) {
   top_ten_path      <- "sheets/top_ten_stats.R"
   template_path     <- "utils/ManualDB.docx"
   
-  # helper: check if A01 (minimum required) has been uploaded
+  # a01 is the minimum required upload
   has_uploads <- function() {
     !is.null(uploaded_files$a01)
   }
@@ -664,11 +637,10 @@ server <- function(input, output, session) {
       !is.null(uploaded_files$oecd_unemp)
   }
   
-  # reactive values
   dashboard_data <- reactiveVal(NULL)
   topten_data <- reactiveVal(NULL)
-  
-  # uploaded file paths (NULL = not uploaded, use DB)
+
+  # uploaded file paths, null means not yet uploaded
   uploaded_files <- reactiveValues(
     a01 = NULL,
     hr1 = NULL,
@@ -681,7 +653,7 @@ server <- function(input, output, session) {
     oecd_inact = NULL
   )
   
-  # Validate Excel sheets on upload and warn if wrong file
+  # warn if uploaded file doesn't have expected sheets
   .validate_excel <- function(path, expected_sheets, file_label) {
     sheets <- tryCatch(readxl::excel_sheets(path), error = function(e) character(0))
     missing <- setdiff(expected_sheets, sheets)
@@ -694,7 +666,7 @@ server <- function(input, output, session) {
     }
   }
   
-  # auto-detect uploaded files by filename and sheet contents
+  # detect file type from filename or sheet contents
   .detect_file_type <- function(name, path) {
     nm <- tolower(name)
     if (grepl("cla01", nm)) return("cla01")
@@ -711,13 +683,13 @@ server <- function(input, output, session) {
     if (any(grepl("payrolled employees", sheets))) return("rtisa")
     if (any(grepl("claimant", sheets)) || any(grepl("people sa", sheets))) return("cla01")
     if (any(grepl("labour market flows", sheets))) return("x02")
-    # last resort: inspect contents (catches oecd files with non-standard names)
+    # last resort: check contents for oecd files with non-standard names
     oecd_result <- .detect_oecd_metric_from_content(path)
     if (!is.null(oecd_result)) return(oecd_result)
     NULL
   }
   
-  # oecd metric detection by file contents (oecd downloads have identical filenames)
+  # oecd downloads often have identical filenames, so check content to distinguish
   .detect_oecd_metric_from_content <- function(path) {
     tryCatch({
       ext <- tolower(tools::file_ext(path))
@@ -732,7 +704,7 @@ server <- function(input, output, session) {
           if (grepl("inactivity", all_text))   return("oecd_inact")
           if (grepl("employment", all_text))   return("oecd_emp")
         }
-        # fallback: sdmx measure column
+        # try sdmx measure column
         check_sheet <- if (length(sheets) > 0) sheets[1] else NULL
         if (!is.null(check_sheet)) {
           raw <- suppressMessages(readxl::read_excel(path, sheet = check_sheet, n_max = 5))
@@ -762,7 +734,7 @@ server <- function(input, output, session) {
     }, error = function(e) NULL)
   }
   
-  # oecd sub-type detection — filename first, then content
+  # oecd sub-type: filename first, then content
   .detect_oecd_type <- function(nm, path = NULL) {
     if (grepl("unemp", nm))                      return("oecd_unemp")
     if (grepl("emp", nm) && !grepl("unemp", nm)) return("oecd_emp")
@@ -774,7 +746,7 @@ server <- function(input, output, session) {
     NULL
   }
   
-  # track uploads
+  # handle file uploads
   observeEvent(input$upload_files, {
     files <- input$upload_files
     if (is.null(files)) return()
@@ -793,11 +765,11 @@ server <- function(input, output, session) {
         next
       }
       
-      # validate and store
+      # store by type
       if (ftype == "a01") {
         .validate_excel(files$datapath[i], c("1", "10", "13", "15", "19"), "A01")
         uploaded_files$a01 <- files$datapath[i]
-        # detect reference month from A01
+        # try to detect reference month from a01
         tryCatch({
           if (!exists(".detect_manual_month_from_a01", inherits = TRUE)) {
             source("utils/calculations_from_excel.R", local = FALSE)
@@ -841,10 +813,10 @@ server <- function(input, output, session) {
     }
   })
   
-  # upload status display; ons download urls built dynamically from reference month
+  # ons download urls built from reference month
   .build_ons_urls <- function(mm) {
     if (is.null(mm) || !nzchar(mm)) mm <- "mar2026"
-    # mm is like "mar2026"; build full month name like "march2026"
+    # e.g. "mar2026" -> "march2026"
     mon3 <- substr(mm, 1, 3)
     yr   <- substr(mm, 4, nchar(mm))
     month_map <- c(jan="january",feb="february",mar="march",apr="april",may="may",jun="june",
@@ -852,7 +824,7 @@ server <- function(input, output, session) {
     mon_num_map <- c(jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12)
     full_month <- paste0(month_map[mon3], yr)
 
-    # X02 is quarterly (Feb, May, Aug, Nov). Find most recent quarter <= reference month.
+    # x02 is quarterly (feb, may, aug, nov) - find most recent quarter
     mon_num <- mon_num_map[mon3]
     x02_quarters <- c(2, 5, 8, 11)
     prev_q <- x02_quarters[x02_quarters <= mon_num]
@@ -881,8 +853,6 @@ server <- function(input, output, session) {
     .build_ons_urls(reference_manual_month())
   })
 
-  # (ONS download links are integrated into the file status tags below)
-  
   output$upload_status <- renderUI({
     all_files <- list(
       A01 = uploaded_files$a01, HR1 = uploaded_files$hr1,
@@ -893,7 +863,7 @@ server <- function(input, output, session) {
       `OECD Inact` = uploaded_files$oecd_inact
     )
     urls <- ons_download_urls()
-    # Map display names to URL keys (OECD tags use different display names)
+    # map display names to url keys
     url_key_map <- c(A01 = "A01", HR1 = "HR1", RTISA = "RTISA", X09 = "X09",
                      CLA01 = "CLA01", X02 = "X02",
                      `OECD UE` = "OECD_UE", `OECD Emp` = "OECD_EMP", `OECD Inact` = "OECD_INACT")
@@ -921,10 +891,9 @@ server <- function(input, output, session) {
     div(style = "margin-top: 10px;", tagList(file_tags), hint_line, month_line)
   })
   
-  # "Download All" button — opens all ONS file links in new tabs
+  # opens all ons download links in new tabs
   output$download_all_btn <- renderUI({
     urls <- ons_download_urls()
-    # Only include ONS file URLs (not OECD API links)
     ons_keys <- c("A01", "HR1", "X09", "RTISA", "CLA01", "X02", "OECD_UE", "OECD_INACT", "OECD_EMP")
     js_opens <- paste(vapply(ons_keys, function(k) {
       if (k %in% names(urls)) paste0("window.open('", urls[[k]], "','_blank');") else ""
@@ -934,7 +903,7 @@ server <- function(input, output, session) {
                 "Download All ONS Files")
   })
 
-  # Detect vacancies periods from A01 and populate manual dropdown
+  # detect vacancies periods from a01
   observeEvent(uploaded_files$a01, {
     path <- uploaded_files$a01
     if (is.null(path)) return()
@@ -951,7 +920,7 @@ server <- function(input, output, session) {
       
       tbl_19 <- readxl::read_excel(path, sheet = "19", col_names = FALSE, .name_repair = "minimal")
       periods <- trimws(as.character(tbl_19[[1]]))
-      # Parse "Mmm-Mmm YYYY" labels to get end dates
+      # parse "Mmm-Mmm YYYY" labels to end dates
       parsed <- vapply(periods, function(x) {
         m <- regmatches(x, gregexpr("[A-Za-z]{3}", x))[[1]]
         y <- regmatches(x, gregexpr("[0-9]{4}", x))[[1]]
@@ -984,7 +953,7 @@ server <- function(input, output, session) {
     }, error = function(e) NULL)
   })
   
-  # Detect payroll periods from RTISA and populate manual dropdown
+  # detect payroll periods from rtisa
   observeEvent(uploaded_files$rtisa, {
     path <- uploaded_files$rtisa
     if (is.null(path)) return()
@@ -1038,7 +1007,7 @@ server <- function(input, output, session) {
     payroll = list(aligned = NULL, latest = NULL)
   ))
   
-  # period toggle button UIs
+  # period toggle buttons
   output$manual_vac_period_buttons <- renderUI({
     aligned <- manual_period_labels$vac_aligned
     latest  <- manual_period_labels$vac_latest
@@ -1072,7 +1041,7 @@ server <- function(input, output, session) {
   observeEvent(input$pay_period_aligned, { selected_pay_period("aligned") })
   observeEvent(input$pay_period_latest,  { selected_pay_period("latest") })
 
-  # Auto tab period toggle buttons (DB-derived)
+  # auto tab period toggles
   auto_selected_vac_period <- reactiveVal("latest")
   auto_selected_pay_period <- reactiveVal("latest")
 
@@ -1120,7 +1089,7 @@ server <- function(input, output, session) {
     if (auto_selected_pay_period() == "latest") labs$payroll$latest else labs$payroll$aligned
   }
   
-  # small date helpers (no extra packages)
+  # date helpers
   add_months <- function(d, n) {
     d <- as.Date(d)
     if (is.na(d)) return(as.Date(NA))
@@ -1147,7 +1116,7 @@ server <- function(input, output, session) {
   }
   
   manual_month_to_display <- function(mm) {
-    #  like "dec2025" -> "december 2025"
+    # e.g. "dec2025" -> "December 2025"
     mm <- tolower(gsub("[[:space:]]+", "", as.character(mm)))
     mon3 <- substr(gsub("[^a-z]", "", mm), 1, 3)
     yr <- as.integer(substr(gsub("[^0-9]", "", mm), 1, 4))
@@ -1160,7 +1129,7 @@ server <- function(input, output, session) {
     if (!is.null(labs$latest) && identical(choice, labs$latest)) "latest" else "aligned"
   }
   
-  # Parse a manual dropdown label ("Mmm-Mmm YYYY") to its end-month Date, or NULL
+  # parse period label to its end-month date
   .parse_period_end <- function(label) {
     if (is.null(label) || !nzchar(label)) return(NULL)
     d <- parse_lfs_end(label)
@@ -1168,7 +1137,7 @@ server <- function(input, output, session) {
     d
   }
   
-  # Resolve selected period label from toggle buttons
+  # selected period label from toggle buttons
   .selected_vac_label <- function() {
     if (selected_vac_period() == "latest") manual_period_labels$vac_latest
     else manual_period_labels$vac_aligned
@@ -1178,7 +1147,7 @@ server <- function(input, output, session) {
     else manual_period_labels$pay_aligned
   }
   
-  # Update reference month  from auto-detected value
+  # update reference month from auto-detected value
   .update_ref_month <- function(detected_mm) {
     old_mm <- reference_manual_month()
     reference_manual_month(detected_mm)
@@ -1191,7 +1160,7 @@ server <- function(input, output, session) {
     }
   }
   
-  # auto detect ref month + dropdownn
+  # auto detect ref month on startup
   session$onFlushed(function() {
     
     showModal(modalDialog(
@@ -1205,7 +1174,7 @@ server <- function(input, output, session) {
     
     mm <- NULL
     
-    # 1) try latest lfs period
+    # try latest lfs period from db
     if (requireNamespace("DBI", quietly = TRUE) && requireNamespace("RPostgres", quietly = TRUE)) {
       conn <- NULL
       tryCatch({
@@ -1224,7 +1193,7 @@ server <- function(input, output, session) {
       })
     }
     
-    # 2) fallback
+    # fallback to config
     if (is.null(mm) && file.exists(config_path)) {
       env <- new.env()
       tryCatch({
@@ -1239,15 +1208,14 @@ server <- function(input, output, session) {
     
     reference_manual_month(mm)
     
-    #  dashboard quarter end (manual_month - 2 months)
-    # manual_month is always the 1st of month
+    # lfs end is manual_month minus 2 months
     mm_mon3 <- substr(gsub("[^a-z]", "", mm), 1, 3)
     mm_yr <- as.integer(substr(gsub("[^0-9]", "", mm), 1, 4))
     mm_m <- match(mm_mon3, tolower(month.abb))
     mm_date <- as.Date(sprintf("%04d-%02d-01", mm_yr, mm_m))
     lfs_end <- add_months(mm_date, -2)
     
-    # vacancies labels
+    # vacancies period labels
     vac_lab_aligned <- ""
     vac_lab_latest <- ""
     if (requireNamespace("DBI", quietly = TRUE) && requireNamespace("RPostgres", quietly = TRUE)) {
@@ -1263,7 +1231,7 @@ server <- function(input, output, session) {
             end_aligned_candidates <- ends[ok & ends <= lfs_end]
             end_aligned <- if (length(end_aligned_candidates) >= 1) max(end_aligned_candidates) else end_latest
             
-            # recreate labels (ensure they exist in db format)
+            # build labels
             make_lfs_label_local <- function(end_date) {
               start_date <- add_months(end_date, -2)
               paste0(format(start_date, "%b"), "-", format(end_date, "%b"), " ", format(end_date, "%Y"))
@@ -1277,7 +1245,7 @@ server <- function(input, output, session) {
       })
     }
     
-    # payroll labels (3-month window)
+    # payroll period labels
     pay_lab_aligned <- ""
     pay_lab_latest <- ""
     if (requireNamespace("DBI", quietly = TRUE) && requireNamespace("RPostgres", quietly = TRUE)) {
@@ -1306,18 +1274,15 @@ server <- function(input, output, session) {
       })
     }
     
-    # store + update dropdowns 
     period_labels(list(
       vac = list(aligned = vac_lab_aligned, latest = vac_lab_latest),
       payroll = list(aligned = pay_lab_aligned, latest = pay_lab_latest)
     ))
     
-    # Period labels are stored in period_labels() reactive and rendered as toggle buttons
-    
     removeModal()
   }, once = TRUE)
   
-  # reference month display (auto tab - editable text input)
+  # reference month display (auto tab)
   output$month_status <- renderUI({
     mm <- reference_manual_month()
     if (is.null(mm) || !nzchar(mm)) {
@@ -1328,7 +1293,7 @@ server <- function(input, output, session) {
               placeholder = "e.g. March 2026", width = "320px")
   })
 
-  # pre-populate manual tab month input when auto-detected
+  # sync manual tab month input from auto-detected value
   observe({
     mm <- reference_manual_month()
     if (!is.null(mm) && nzchar(mm)) {
@@ -1337,11 +1302,11 @@ server <- function(input, output, session) {
     }
   })
 
-  # parse typed month to "mar2026" format
+  # parse typed month to "mar2026" format for internal use
   .parse_month_input <- function(txt) {
     if (is.null(txt) || !nzchar(trimws(txt))) return(NULL)
     txt <- trimws(txt)
-    # try "March 2026" or "march 2026" format
+    # try "March 2026" format
     d <- suppressWarnings(as.Date(paste0("01 ", txt), format = "%d %B %Y"))
     if (!is.na(d)) return(tolower(paste0(format(d, "%b"), format(d, "%Y"))))
     # try "Mar 2026"
@@ -1350,24 +1315,23 @@ server <- function(input, output, session) {
     NULL
   }
 
-  # update reference month when user types in manual tab
+  # update ref month when user types in manual tab
   observeEvent(input$ref_month_input, {
     parsed <- .parse_month_input(input$ref_month_input)
     if (!is.null(parsed)) reference_manual_month(parsed)
   }, ignoreInit = TRUE)
 
-  # update reference month when user types in auto tab
+  # update ref month when user types in auto tab
   observeEvent(input$auto_ref_month_input, {
     parsed <- .parse_month_input(input$auto_ref_month_input)
     if (!is.null(parsed)) reference_manual_month(parsed)
   }, ignoreInit = TRUE)
 
-  # pre-populate manual tab month input with auto-detected month
+  # set manual tab month if user hasn't typed yet
   observe({
     mm <- reference_manual_month()
     if (!is.null(mm) && nzchar(mm)) {
       display <- manual_month_to_display(mm)
-      # only set if the input is currently empty (i.e. user hasn't typed yet)
       if (is.null(input$ref_month_input) || !nzchar(input$ref_month_input)) {
         updateTextInput(session, "ref_month_input", value = display)
       }
@@ -1376,41 +1340,34 @@ server <- function(input, output, session) {
 
 
   # preview: dashboard
-  
+
   observeEvent(input$preview_dashboard, {
-    
-    withProgress(message = "Loading Dashboard Data", value = 0, {
-      
-      incProgress(0.1, detail = "Step 1/6: Checking configuration files...")
-      Sys.sleep(0.3)
-      
+
+    withProgress(message = "loading dashboard...", value = 0, {
+
+      incProgress(0.2, detail = "loading...")
+
       if (!file.exists(calculations_path)) {
         showNotification("Error: calculations.R not found", type = "error")
         return()
       }
-      
-      incProgress(0.15, detail = "Step 2/6: Loading configuration...")
-      Sys.sleep(0.2)
-      
+
       calc_env <- new.env(parent = globalenv())
-      
+
       if (file.exists(config_path)) {
         source(config_path, local = calc_env)
       }
-      
-      incProgress(0.15, detail = "Step 3/6: Setting reference month...")
-      Sys.sleep(0.2)
-      
+
       mm <- reference_manual_month()
       if (!is.null(mm) && nzchar(mm)) {
         calc_env$manual_month <- tolower(mm)
       }
-      
-      # vacancies & payroll choices (use toggle buttons)
+
+      # vacancies & payroll choices from toggle buttons
       calc_env$vacancies_mode <- auto_selected_vac_period()
       calc_env$payroll_mode <- auto_selected_pay_period()
 
-      incProgress(0.2, detail = "Step 4/6: Running calculations...")
+      incProgress(0.4, detail = "calculating...")
 
       tryCatch({
         source(calculations_path, local = calc_env)
@@ -1418,9 +1375,6 @@ server <- function(input, output, session) {
         showNotification(paste("Calculation error:", e$message), type = "error", duration = 5)
         return()
       })
-
-      incProgress(0.2, detail = "Step 5/6: Building metrics table...")
-      Sys.sleep(0.2)
       
       gv <- function(name) {
         if (exists(name, envir = calc_env)) {
@@ -1445,9 +1399,8 @@ server <- function(input, output, session) {
         list(name = "Wages CPI-adjusted (%)", cur = gv("latest_wages_cpi"), dq = gv("wages_cpi_change_q"), dy = gv("wages_cpi_change_y"), dc = gv("wages_cpi_change_covid"), de = gv("wages_cpi_change_election"), invert = FALSE, type = "wages")
       )
       
-      incProgress(0.2, detail = "Step 6/6: Finalizing dashboard...")
-      Sys.sleep(0.2)
-      
+      incProgress(0.4, detail = "done")
+
       dashboard_data(metrics)
     })
     
@@ -1455,40 +1408,33 @@ server <- function(input, output, session) {
   })
   
   # preview: top ten
-  
+
   observeEvent(input$preview_topten, {
-    
-    withProgress(message = "Loading Top Ten Statistics", value = 0, {
-      
-      incProgress(0.1, detail = "Step 1/6: Checking required files...")
-      Sys.sleep(0.3)
-      
+
+    withProgress(message = "loading top ten...", value = 0, {
+
+      incProgress(0.2, detail = "loading...")
+
       if (!file.exists(calculations_path)) {
         showNotification("Error: calculations.R not found", type = "error")
         return()
       }
-      
+
       if (!file.exists(top_ten_path)) {
         showNotification("Error: top_ten_stats.R not found", type = "error")
         return()
       }
-      
-      incProgress(0.15, detail = "Step 2/6: Loading configuration...")
-      Sys.sleep(0.2)
-      
+
       if (file.exists(config_path)) {
         source(config_path, local = FALSE)
       }
-      
-      incProgress(0.15, detail = "Step 3/6: Setting reference month...")
-      Sys.sleep(0.2)
-      
+
       mm <- reference_manual_month()
       if (!is.null(mm) && nzchar(mm)) {
         manual_month <<- tolower(mm)
       }
 
-      incProgress(0.2, detail = "Step 4/6: Running calculations...")
+      incProgress(0.4, detail = "calculating...")
 
       tryCatch({
         source(calculations_path, local = FALSE)
@@ -1496,12 +1442,10 @@ server <- function(input, output, session) {
         showNotification(paste("Calculation error:", e$message), type = "error", duration = 5)
         return()
       })
-      
-      incProgress(0.2, detail = "Step 5/6: Loading top ten generator...")
-      
+
       source(top_ten_path, local = FALSE)
-      
-      incProgress(0.2, detail = "Step 6/6: Generating statistics...")
+
+      incProgress(0.4, detail = "generating...")
       
       if (exists("generate_top_ten")) {
         top10 <- tryCatch(generate_top_ten(), error = function(e) {
@@ -1518,11 +1462,11 @@ server <- function(input, output, session) {
     showNotification("Top Ten statistics loaded successfully!", type = "message", duration = 3)
   })
 
-  # auto preview: summary (DB)
+  # auto preview: summary
   observeEvent(input$auto_preview_summary, {
 
-    withProgress(message = "Generating Summary (Database)", value = 0, {
-      incProgress(0.2, detail = "Loading configuration...")
+    withProgress(message = "generating summary...", value = 0, {
+      incProgress(0.2, detail = "loading...")
 
       if (file.exists(config_path)) source(config_path, local = FALSE)
       source("utils/helpers.R", local = FALSE)
@@ -1530,7 +1474,7 @@ server <- function(input, output, session) {
       mm <- reference_manual_month()
       if (!is.null(mm) && nzchar(mm)) manual_month <<- tolower(mm)
 
-      incProgress(0.3, detail = "Running calculations...")
+      incProgress(0.3, detail = "calculating...")
       tryCatch({
         source(calculations_path, local = FALSE)
       }, error = function(e) {
@@ -1538,7 +1482,7 @@ server <- function(input, output, session) {
         return()
       })
 
-      incProgress(0.3, detail = "Generating narrative...")
+      incProgress(0.3, detail = "generating...")
       source(summary_path, local = FALSE)
 
       result <- tryCatch(generate_summary(), error = function(e) {
@@ -1546,16 +1490,16 @@ server <- function(input, output, session) {
         NULL
       })
       if (!is.null(result)) summary_data(result)
-      incProgress(0.2, detail = "Done")
+      incProgress(0.2, detail = "done")
     })
 
     showNotification("Summary generated (Database)", type = "message", duration = 3)
   })
 
-  # auto preview: OECD (DB)
+  # auto preview: oecd
   observeEvent(input$auto_preview_oecd, {
 
-    withProgress(message = "Loading OECD Data (Database)", value = 0, {
+    withProgress(message = "loading oecd data...", value = 0, {
 
       .fetch_oecd_table <- function(conn, table_name) {
         tryCatch({
@@ -1577,20 +1521,16 @@ server <- function(input, output, session) {
         }, error = function(e) NULL)
       }
 
-      incProgress(0.2, detail = "Connecting to database...")
+      incProgress(0.2, detail = "loading...")
 
       conn <- NULL
       unemp_data <- NULL; emp_data <- NULL; inact_data <- NULL
       tryCatch({
         conn <- DBI::dbConnect(RPostgres::Postgres())
 
-        incProgress(0.2, detail = "Reading unemployment rate...")
+        incProgress(0.5, detail = "generating...")
         unemp_data <- .fetch_oecd_table(conn, "labour_statistics__unemployment_rate")
-
-        incProgress(0.2, detail = "Reading employment rate...")
         emp_data <- .fetch_oecd_table(conn, "labour_statistics__employment_rate")
-
-        incProgress(0.2, detail = "Reading inactivity rate...")
         inact_data <- .fetch_oecd_table(conn, "labour_statistics__inactivity_rate")
       }, error = function(e) {
         showNotification(paste("OECD DB error:", e$message), type = "error", duration = 5)
@@ -1603,7 +1543,7 @@ server <- function(input, output, session) {
         return()
       }
 
-      # Build preview table in same format as manual OECD preview
+      # build preview table
       country_order <- c("United Kingdom", "United States", "France", "Germany",
                          "Italy", "Spain", "Canada", "Japan", "Euro area")
 
@@ -1640,14 +1580,14 @@ server <- function(input, output, session) {
       })
 
       oecd_preview_data(rows)
-      incProgress(0.2, detail = "Done")
+      incProgress(0.3, detail = "done")
     })
 
     showNotification("OECD data loaded (Database)", type = "message", duration = 3)
   })
 
-  # download: word
-  
+  # download: word (auto tab)
+
   output$download_word <- downloadHandler(
     filename = function() {
       mm <- reference_manual_month()
@@ -1657,43 +1597,26 @@ server <- function(input, output, session) {
     content = function(file) {
       
       tryCatch({
-        withProgress(message = "Generating Word Document", value = 0, {
-          
-          incProgress(0.15, detail = "Step 1/6: Checking officer package...")
-          Sys.sleep(0.2)
-          
+        withProgress(message = "generating word document...", value = 0, {
+
+          incProgress(0.2, detail = "loading...")
+
           if (!requireNamespace("officer", quietly = TRUE)) {
             stop("officer package not installed")
           }
-          
-          incProgress(0.15, detail = "Step 2/6: Locating template file...")
-          Sys.sleep(0.2)
-          
+
           if (!file.exists(template_path)) {
-            incProgress(0.7, detail = "Creating basic document (no template)...")
-            
-            doc <- officer::read_docx()
-            doc <- officer::body_add_par(doc, "Labour Market Statistics Brief", style = "heading 1")
-            doc <- officer::body_add_par(doc, paste("Generated:", format(Sys.Date(), "%d %B %Y")))
-            doc <- officer::body_add_par(doc, "Note: Template file (utils/DB.docx) not found.")
-            print(doc, target = file)
-            
-            showNotification("Word document created (basic - no template)", type = "warning", duration = 3)
-            return()
+            stop("Template file (ManualDB.docx) not found")
           }
-          
-          incProgress(0.2, detail = "Step 3/6: Loading word output script...")
-          
+
+          incProgress(0.4, detail = "generating...")
+
           source(word_script_path, local = FALSE)
 
           mm <- reference_manual_month()
           vac_mode <- auto_selected_vac_period()
           pay_mode <- auto_selected_pay_period()
           month_override <- mm
-          
-          incProgress(0.2, detail = "Step 4/6: Running calculations...")
-          incProgress(0.15, detail = "Step 5/6: Generating document content...")
-          incProgress(0.15, detail = "Step 6/6: Writing Word file...")
           
           generate_word_output(
             template_path = template_path,
@@ -1707,15 +1630,17 @@ server <- function(input, output, session) {
             payroll_mode_override = pay_mode,
             contact_names = input$auto_contact_names
           )
+
+          incProgress(0.4, detail = "done")
         })
-        
+
         showNotification("Word document generated!", type = "message", duration = 3)
-        
+
       }, error = function(e) {
         message("Word download error: ", e$message)
         showNotification(paste("Word error:", e$message), type = "error", duration = 5)
-        
-        # write a fallback docx so the download doesn't fail as .htm
+
+        # write a fallback docx so the download doesn't silently fail
         if (requireNamespace("officer", quietly = TRUE)) {
           doc <- officer::read_docx()
           doc <- officer::body_add_par(doc, "Error Generating Brief", style = "heading 1")
@@ -1737,24 +1662,22 @@ server <- function(input, output, session) {
       paste0("LM Stats Audit - ", label, ".xlsx")
     },
     content = function(file) {
-      # :
       tryCatch({
-        withProgress(message = "Generating Excel Workbook", value = 0, {
-          
-          incProgress(0.1, detail = "Step 1/4: Checking openxlsx...")
+        withProgress(message = "generating excel workbook...", value = 0, {
+
+          incProgress(0.2, detail = "loading...")
           if (!requireNamespace("openxlsx", quietly = TRUE)) {
             stop("openxlsx package not installed")
           }
-          
-          incProgress(0.2, detail = "Step 2/4: Loading excel_audit_workbook.R...")
+
           excel_env <- new.env(parent = globalenv())
           source(excel_script_path, local = excel_env)
-          
+
           if (!exists("create_audit_workbook", envir = excel_env)) {
             stop("create_audit_workbook() not found after sourcing excel_audit_workbook.R")
           }
-          
-          incProgress(0.5, detail = "Step 3/4: Building workbook (this may take a moment)...")
+
+          incProgress(0.5, detail = "generating...")
           mm <- reference_manual_month()
           vac_mode <- auto_selected_vac_period()
           pay_mode <- auto_selected_pay_period()
@@ -1779,7 +1702,7 @@ server <- function(input, output, session) {
             verbose = FALSE
           )
           
-          incProgress(0.15, detail = "Step 4/4: Preparing download...")
+          incProgress(0.3, detail = "done")
           ok <- file.copy(tmp_xlsx, file, overwrite = TRUE)
           if (!isTRUE(ok) || !file.exists(file)) {
             stop("Excel workbook could not be copied to Shiny download location")
@@ -1789,7 +1712,7 @@ server <- function(input, output, session) {
         showNotification("Excel workbook generated", type = "message", duration = 3)
         
       }, error = function(e) {
-        # on error, still return a valid .xlsx to the user.
+        # return a valid xlsx with error info so browser doesn't hang
         message("Excel download error: ", e$message)
         showNotification(paste("Excel error:", e$message), type = "error", duration = 5)
         
@@ -1804,7 +1727,6 @@ server <- function(input, output, session) {
           openxlsx::saveWorkbook(wb, tmp_xlsx, overwrite = TRUE)
           file.copy(tmp_xlsx, file, overwrite = TRUE)
         } else {
-          # worst-case: write a plain-text error so the download isn't empty
           writeLines(paste("Failed to generate Excel workbook:", e$message), con = file)
         }
       })
@@ -1812,7 +1734,7 @@ server <- function(input, output, session) {
   )
   
   
-  # manual tab handlers
+  # manual tab
 
   .check_manual_ready <- function() {
     if (is.null(uploaded_files$a01)) {
@@ -1833,17 +1755,15 @@ server <- function(input, output, session) {
     TRUE
   }
   
-  # manual preview: dashboard
+  # manual preview: dashboard (excel upload)
   observeEvent(input$manual_preview_dashboard, {
     if (!.check_manual_ready()) return()
     
-    withProgress(message = "Loading Dashboard (Manual Upload)", value = 0, {
-      
-      incProgress(0.1, detail = "Reading Excel files...")
-      
+    withProgress(message = "loading dashboard...", value = 0, {
+
+      incProgress(0.2, detail = "calculating...")
+
       calc_env <- new.env(parent = globalenv())
-      
-      incProgress(0.3, detail = "Running calculations...")
       
       source(excel_calc_path, local = calc_env)
       source("utils/helpers.R", local = calc_env)
@@ -1856,9 +1776,9 @@ server <- function(input, output, session) {
         target_env = calc_env
       )
       .update_ref_month(detected_mm)
-      
-      incProgress(0.4, detail = "Building metrics table...")
-      
+
+      incProgress(0.6, detail = "generating...")
+
       gv <- function(name) {
         if (exists(name, envir = calc_env)) {
           val <- get(name, envir = calc_env)
@@ -1882,10 +1802,10 @@ server <- function(input, output, session) {
         list(name = "Wages CPI-adjusted (%)", cur = gv("latest_wages_cpi"), dq = gv("wages_cpi_change_q"), dy = gv("wages_cpi_change_y"), dc = gv("wages_cpi_change_covid"), de = gv("wages_cpi_change_election"), invert = FALSE, type = "wages")
       )
       
-      incProgress(0.2, detail = "Done")
+      incProgress(0.2, detail = "done")
       dashboard_data(metrics)
     })
-    
+
     showNotification("Dashboard loaded (Manual Upload)", type = "message", duration = 3)
   })
   
@@ -1893,9 +1813,9 @@ server <- function(input, output, session) {
   observeEvent(input$manual_preview_topten, {
     if (!.check_manual_ready()) return()
     
-    withProgress(message = "Loading Top Ten (Manual Upload)", value = 0, {
-      
-      incProgress(0.2, detail = "Running Excel calculations...")
+    withProgress(message = "loading top ten...", value = 0, {
+
+      incProgress(0.2, detail = "calculating...")
       
       if (file.exists(config_path)) source(config_path, local = FALSE)
       source("utils/helpers.R", local = FALSE)
@@ -1910,7 +1830,7 @@ server <- function(input, output, session) {
       manual_month <<- detected_mm
       .update_ref_month(detected_mm)
 
-      incProgress(0.5, detail = "Generating top ten stats...")
+      incProgress(0.5, detail = "generating...")
       
       source(top_ten_path, local = FALSE)
       
@@ -1922,9 +1842,9 @@ server <- function(input, output, session) {
         if (!is.null(top10)) topten_data(top10)
       }
       
-      incProgress(0.3, detail = "Done")
+      incProgress(0.3, detail = "done")
     })
-    
+
     showNotification("Top Ten loaded (Manual Upload)", type = "message", duration = 3)
   })
   
@@ -1934,8 +1854,8 @@ server <- function(input, output, session) {
   observeEvent(input$manual_preview_summary, {
     if (!.check_manual_ready()) return()
     
-    withProgress(message = "Generating Summary", value = 0, {
-      incProgress(0.2, detail = "Running calculations...")
+    withProgress(message = "generating summary...", value = 0, {
+      incProgress(0.2, detail = "calculating...")
       
       source("utils/helpers.R", local = FALSE)
       source(excel_calc_path, local = FALSE)
@@ -1950,21 +1870,21 @@ server <- function(input, output, session) {
       manual_month <<- detected_mm
       .update_ref_month(detected_mm)
       
-      incProgress(0.5, detail = "Generating narrative...")
+      incProgress(0.5, detail = "generating...")
       source(summary_path, local = FALSE)
-      
+
       result <- tryCatch(generate_summary(), error = function(e) {
         showNotification(paste("Summary error:", e$message), type = "error")
         NULL
       })
       if (!is.null(result)) summary_data(result)
-      incProgress(0.3, detail = "Done")
+      incProgress(0.3, detail = "done")
     })
-    
+
     showNotification("Summary generated (Manual Upload)", type = "message", duration = 3)
   })
   
-  # manual preview: OECD
+  # manual preview: oecd
   oecd_preview_data <- reactiveVal(NULL)
   
   observeEvent(input$manual_preview_oecd, {
@@ -1976,26 +1896,24 @@ server <- function(input, output, session) {
       return()
     }
 
-    withProgress(message = "Loading OECD Data", value = 0, {
-      # Source manual_word_output.R to get .read_oecd_latest and country helpers
+    withProgress(message = "loading oecd data...", value = 0, {
       source("utils/manual_word_output.R", local = TRUE)
 
-      incProgress(0.3, detail = "Reading unemployment...")
+      incProgress(0.3, detail = "loading...")
       unemp_data <- if (!is.null(uploaded_files$oecd_unemp))
         tryCatch(.read_oecd_latest(uploaded_files$oecd_unemp), error = function(e) NULL)
       else NULL
 
-      incProgress(0.3, detail = "Reading employment...")
       emp_data <- if (!is.null(uploaded_files$oecd_emp))
         tryCatch(.read_oecd_latest(uploaded_files$oecd_emp), error = function(e) NULL)
       else NULL
 
-      incProgress(0.3, detail = "Reading inactivity...")
+      incProgress(0.5, detail = "generating...")
       inact_data <- if (!is.null(uploaded_files$oecd_inact))
         tryCatch(.read_oecd_latest(uploaded_files$oecd_inact), error = function(e) NULL)
       else NULL
 
-      # Build the preview table in the same country order as the Word briefing
+      # build preview table
       country_order <- c("United Kingdom", "United States", "France", "Germany",
                          "Italy", "Spain", "Canada", "Japan", "Euro area")
 
@@ -2032,7 +1950,7 @@ server <- function(input, output, session) {
       })
 
       oecd_preview_data(rows)
-      incProgress(0.1, detail = "Done")
+      incProgress(0.2, detail = "done")
     })
 
     showNotification("OECD data loaded", type = "message", duration = 3)
@@ -2055,15 +1973,15 @@ server <- function(input, output, session) {
       }
       
       tryCatch({
-        withProgress(message = "Generating Word (Manual Upload)", value = 0, {
-          
-          incProgress(0.2, detail = "Loading scripts...")
+        withProgress(message = "generating word document...", value = 0, {
+
+          incProgress(0.2, detail = "loading...")
           
           source("utils/helpers.R", local = FALSE)
           source(excel_calc_path, local = FALSE)
           if (file.exists(config_path)) source(config_path, local = FALSE)
           
-          incProgress(0.3, detail = "Running calculations...")
+          incProgress(0.3, detail = "calculating...")
           
           detected_mm <- run_calculations_from_excel(
             manual_month = NULL,
@@ -2075,7 +1993,7 @@ server <- function(input, output, session) {
           manual_month <<- detected_mm
           .update_ref_month(detected_mm)
           
-          incProgress(0.2, detail = "Generating summary & top ten...")
+          incProgress(0.2, detail = "generating...")
           
           source(summary_path, local = FALSE)
           source(top_ten_path, local = FALSE)
@@ -2088,9 +2006,7 @@ server <- function(input, output, session) {
           summary_lines <- tryCatch(generate_summary(), error = function(e) fallback_lines())
           top10_lines <- tryCatch(generate_top_ten(), error = function(e) fallback_lines())
           
-          incProgress(0.2, detail = "Writing Word file...")
-          
-          # use ManualDB.docx template with qvz placeholders
+          # use ManualDB.docx template
           manual_template <- "utils/ManualDB.docx"
           if (file.exists(manual_template)) {
             source("utils/manual_word_output.R", local = FALSE)
@@ -2110,24 +2026,11 @@ server <- function(input, output, session) {
               contact_names = input$contact_names,
               verbose = FALSE
             )
-          } else if (file.exists(template_path)) {
-            # fallback to DB.docx with old-style placeholders
-            source(word_script_path, local = FALSE)
-            doc <- officer::read_docx(template_path)
-            title_label <- if (exists("manual_month", inherits = TRUE)) manual_month_to_label(manual_month) else ""
-            doc <- replace_all(doc, "Z1", title_label)
-            if (exists("lfs_period_label", inherits = TRUE)) doc <- replace_all(doc, "LFS_PERIOD_LABEL", lfs_period_label)
-            if (exists("lfs_period_short_label", inherits = TRUE)) doc <- replace_all(doc, "LFS_QUARTER_LABEL", lfs_period_short_label)
-            if (exists("vacancies_period_short_label", inherits = TRUE)) doc <- replace_all(doc, "VACANCIES_QUARTER_LABEL", vacancies_period_short_label)
-            for (i in 10:1) doc <- replace_all(doc, paste0("sl", i), summary_lines[[paste0("line", i)]])
-            for (i in 10:1) doc <- replace_all(doc, paste0("tt", i), top10_lines[[paste0("line", i)]])
-            doc <- replace_all(doc, "RENDER_DATE", format(Sys.Date(), "%d %B %Y"))
-            print(doc, target = file)
           } else {
-            stop("No Word template found (ManualDB.docx or DB.docx)")
+            stop("No Word template found (ManualDB.docx)")
           }
           
-          incProgress(0.1, detail = "Done")
+          incProgress(0.1, detail = "done")
         })
         
         showNotification("Word document generated (Manual Upload)", type = "message", duration = 3)
@@ -2138,7 +2041,7 @@ server <- function(input, output, session) {
           paste("Word generation failed:", e$message),
           type = "error", duration = 10
         )
-        # so the browser doesn't hang, but the notication tells the user what happened
+        # write something so the download doesn't silently fail
         writeLines(paste("Generation failed:", e$message), con = file)
       })
     }
@@ -2164,13 +2067,13 @@ server <- function(input, output, session) {
       }
       
       tryCatch({
-        withProgress(message = "Generating Excel (Manual Upload)", value = 0, {
-          incProgress(0.2, detail = "Loading scripts...")
+        withProgress(message = "generating excel workbook...", value = 0, {
+          incProgress(0.2, detail = "loading...")
           source("utils/helpers.R", local = FALSE)
           source(excel_calc_path, local = FALSE)
           if (file.exists(config_path)) source(config_path, local = FALSE)
           
-          incProgress(0.4, detail = "Running calculations...")
+          incProgress(0.4, detail = "calculating...")
           detected_mm <- run_calculations_from_excel(
             manual_month = NULL,
             file_a01 = uploaded_files$a01, file_hr1 = uploaded_files$hr1,
@@ -2182,7 +2085,7 @@ server <- function(input, output, session) {
           manual_month <<- detected_mm
           .update_ref_month(detected_mm)
 
-          incProgress(0.3, detail = "Building workbook...")
+          incProgress(0.3, detail = "generating...")
           excel_env <- new.env(parent = globalenv())
           source(excel_script_path, local = excel_env)
           tmp_xlsx <- tempfile(fileext = ".xlsx")
@@ -2204,7 +2107,7 @@ server <- function(input, output, session) {
             verbose = FALSE
           )
           
-          incProgress(0.1, detail = "Done")
+          incProgress(0.1, detail = "done")
           file.copy(tmp_xlsx, file, overwrite = TRUE)
         })
         showNotification("Excel workbook generated (manual mode)", type = "message", duration = 3)
@@ -2222,7 +2125,6 @@ server <- function(input, output, session) {
   )
   
   # render: dashboard preview
-  
   output$dashboard_preview <- renderUI({
     metrics <- dashboard_data()
     
@@ -2285,7 +2187,6 @@ server <- function(input, output, session) {
   })
   
   # render: top ten preview
-  
   output$topten_preview <- renderUI({
     top10 <- topten_data()
     
@@ -2313,7 +2214,6 @@ server <- function(input, output, session) {
   })
   
   # render: summary preview
-  
   output$summary_preview <- renderUI({
     summ <- summary_data()
     if (is.null(summ)) {
@@ -2328,15 +2228,14 @@ server <- function(input, output, session) {
     tags$ol(class = "top-ten-list", items)
   })
   
-  # render: OECD preview
-  
+  # render: oecd preview
   output$oecd_preview <- renderUI({
     rows <- oecd_preview_data()
     if (is.null(rows)) {
       return(p(class = "govuk-body", "Click 'OECD' to preview uploaded international data."))
     }
 
-    # Styled to match the Word briefing table layout
+    # match word briefing table styling
     header_style <- paste0(
       "background-color:#1f3864; color:#ffffff; font-weight:bold;",
       "padding:8px 10px; text-align:center; border:1px solid #ffffff;"
@@ -2396,8 +2295,5 @@ server <- function(input, output, session) {
     )
   })
 }
-
-# run application
-
 
 shinyApp(ui = ui, server = server)

@@ -1,4 +1,4 @@
-# redundancy module - a01 sheet 10
+# a01 sheet 10 - redundancies
 
 REDUND_CODE <- "BEIR"
 

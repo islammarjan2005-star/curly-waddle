@@ -1,4 +1,4 @@
-# manual_word_output.R - generate word output from uploaded excel files
+# generate word output from uploaded excel files (no database needed)
 
 suppressPackageStartupMessages({
   library(readxl)
@@ -6,13 +6,12 @@ suppressPackageStartupMessages({
 
 source("utils/word_helpers.R", local = FALSE)
 
-# read the latest oecd data point per country from an uploaded file
 .read_oecd_latest <- function(path) {
   if (is.null(path) || !file.exists(path)) return(NULL)
   
   ext <- tolower(tools::file_ext(path))
   
-  # excel: prefer wide "Table" sheet
+  # prefer the wide "Table" sheet if it exists
   if (ext %in% c("xlsx", "xls")) {
     sheets    <- tryCatch(readxl::excel_sheets(path), error = function(e) character(0))
     tbl_sheet <- if ("Table" %in% sheets) "Table" else NULL
@@ -20,7 +19,7 @@ source("utils/word_helpers.R", local = FALSE)
     if (!is.null(tbl_sheet)) {
       raw <- suppressMessages(readxl::read_excel(path, sheet = tbl_sheet, col_names = FALSE))
 
-      # find header row (has 3+ period strings like "Q1-2025", "Jan 2025" etc.)
+      # find header row by looking for 3+ period-like strings
       header_row <- NULL
       for (ri in 1:min(15, nrow(raw))) {
         row_text    <- as.character(unlist(raw[ri, ]))
@@ -51,11 +50,11 @@ source("utils/word_helpers.R", local = FALSE)
       if (nrow(results) > 0) return(results)
     }
 
-    # fallback: try sdmx long format
+    # fallback to sdmx long format
     if (length(sheets) > 0) return(.parse_oecd_sdmx(suppressMessages(readxl::read_excel(path, sheet = sheets[1], n_max = 5000))))
   }
 
-  # csv: assume long sdmx format
+  # csv is always sdmx long format
   if (ext == "csv") {
     raw <- tryCatch(read.csv(path, stringsAsFactors = FALSE), error = function(e) data.frame())
     if (nrow(raw) > 0) return(.parse_oecd_sdmx(raw))
@@ -135,7 +134,6 @@ generate_manual_word_output <- function(
 
   doc <- read_docx(template_path)
 
-  # Replace contact names in header
   contact <- if (!is.null(contact_names) && nzchar(contact_names)) contact_names else ""
   doc <- replace_all(doc, "qvzcontact", contact)
 
@@ -229,7 +227,7 @@ generate_manual_word_output <- function(
     if (verbose) message("[manual] OECD comparison table populated")
   }
   
-  # clear any unfilled qvz placeholders
+  # replace any unfilled qvz placeholders with em-dash
   body_xml   <- doc$doc_obj$get()
   ns         <- xml2::xml_ns(body_xml)
   text_nodes <- xml2::xml_find_all(body_xml, ".//w:t", ns = ns)

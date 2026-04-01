@@ -1,5 +1,4 @@
-# payroll module - rtisa payrolled employees
-# table: ons.labour_market__payrolled_employees
+# payroll module - paye payrolled employees from ons.labour_market__payrolled_employees
 
 PAYROLL_UNIT_TYPE <- "Payrolled employees"
 
@@ -48,7 +47,7 @@ compute_payroll <- function(pg_data, manual_mm, mode = c("latest", "aligned")) {
 
   mode <- match.arg(mode)
 
-  # anchor: latest available, or aligned to dashboard reference quarter end
+  # anchor to latest available, or align to dashboard reference quarter end
   if (mode == "aligned") {
     target_end <- tryCatch(parse_manual_month(manual_mm) %m-% months(2), error = function(e) NA)
     if (!is.na(target_end)) {
@@ -61,7 +60,7 @@ compute_payroll <- function(pg_data, manual_mm, mode = c("latest", "aligned")) {
     anchor <- payroll_data$parsed_date[1]
   }
 
-  # 3-month windows
+  # 3-month rolling windows for comparison
   win3     <- seq(anchor,                    by = "-1 month", length.out = 3)
   prev3    <- seq(anchor %m-% months(3),     by = "-1 month", length.out = 3)
   yago3    <- seq(anchor %m-% months(12),    by = "-1 month", length.out = 3)
@@ -74,13 +73,13 @@ compute_payroll <- function(pg_data, manual_mm, mode = c("latest", "aligned")) {
   val_c <- get_payroll_avg(pg_data, covid3)
   val_e <- get_payroll_avg(pg_data, election3)
 
-  # changes in thousands
+  # deltas in thousands
   dq <- if (!is.na(cur) && !is.na(val_q)) (cur - val_q) / 1000 else NA_real_
   dy <- if (!is.na(cur) && !is.na(val_y)) (cur - val_y) / 1000 else NA_real_
   dc <- if (!is.na(cur) && !is.na(val_c)) (cur - val_c) / 1000 else NA_real_
   de <- if (!is.na(cur) && !is.na(val_e)) (cur - val_e) / 1000 else NA_real_
 
-  # flash estimate - latest single month
+  # flash estimate - latest single month, frequently revised
   flash_anchor <- payroll_data$parsed_date[1]
   flash_cur    <- suppressWarnings(as.numeric(payroll_data$value[1]))
 

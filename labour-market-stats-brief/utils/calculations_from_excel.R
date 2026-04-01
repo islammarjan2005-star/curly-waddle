@@ -1,14 +1,10 @@
-# calculations_from_excel.R — reads ons excel files and populates dashboard variables
-
-suppressPackageStartupMessages({
-  library(readxl)
-  library(lubridate)
-})
+# reads ons excel files and populates dashboard variables (no database needed)
 
 if (!exists("parse_manual_month", inherits = TRUE)) source("utils/helpers.R")
 if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
+source("utils/excel_helpers.R", local = FALSE)
 
-# returns empty data.frame on failure
+# returns empty data.frame on failure so callers can check nrow
 .read_sheet <- function(path, sheet) {
   tryCatch(
     suppressMessages(readxl::read_excel(path, sheet = sheet, col_names = FALSE)),
@@ -19,70 +15,13 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   )
 }
 
-.find_row <- function(tbl, label) {
-  if (nrow(tbl) == 0 || ncol(tbl) == 0) return(NA_integer_)
-  col1 <- trimws(as.character(tbl[[1]]))
-  label <- trimws(label)
-  idx <- which(tolower(col1) == tolower(label))
-  if (length(idx) == 0) return(NA_integer_)
-  idx[1]
-}
-
-# extract numeric value at [row, col]
-.cell_num <- function(tbl, row, col) {
-  if (is.na(row) || row < 1 || row > nrow(tbl) || col > ncol(tbl)) return(NA_real_)
-  x <- as.character(tbl[[col]][row])
-  suppressWarnings(as.numeric(gsub("[^0-9.eE+-]", "", x)))
-}
-
-# lfs 3-month label from end date, e.g. "Oct-Dec 2025"
-.lfs_label <- function(end_date) {
-  start_date <- end_date %m-% months(2)
-  sprintf("%s-%s %s", format(start_date, "%b"), format(end_date, "%b"), format(end_date, "%Y"))
-}
-
-# parse dates from mixed column (serial numbers, datetimes, text)
-.detect_dates <- function(x) {
-  if (inherits(x, "Date")) return(floor_date(as.Date(x), "month"))
-  if (inherits(x, c("POSIXct", "POSIXt"))) return(floor_date(as.Date(x), "month"))
-  s <- as.character(x)
-  num <- suppressWarnings(as.numeric(s))
-  is_num <- !is.na(num) & grepl("^[0-9]+\\.?[0-9]*$", s)
-  out <- rep(as.Date(NA), length(s))
-  if (any(is_num)) out[is_num] <- as.Date(num[is_num], origin = "1899-12-30")
-  if (any(!is_num)) {
-    out[!is_num] <- suppressWarnings(
-      lubridate::parse_date_time(
-        s[!is_num],
-        orders = c("ymd", "mdy", "dmy", "bY", "BY", "Y b", "b Y", "Ym", "my")
-      )
-    )
-  }
-  floor_date(as.Date(out), "month")
-}
-
-# value at target date in a date-indexed series
-.val_by_date <- function(df_m, df_v, target_date) {
-  idx <- which(df_m == target_date)
-  if (length(idx) == 0) return(NA_real_)
-  df_v[idx[1]]
-}
-
-# mean of values at specified dates
-.avg_by_dates <- function(df_m, df_v, target_dates) {
-  vals <- vapply(target_dates, function(d) .val_by_date(df_m, df_v, d), numeric(1))
-  if (any(is.na(vals))) return(NA_real_)
-  mean(vals)
-}
-
-# last non-NA value
 .safe_last <- function(x) {
   x <- x[!is.na(x)]
   if (length(x) == 0) return(NA_real_)
   x[length(x)]
 }
 
-# find column by ons dataset code (scans header rows)
+# find column by ons dataset code (e.g. "KAC9") in the header rows
 .find_col_by_code <- function(tbl, code, fallback_col = NA_integer_, search_rows = 1:min(10, nrow(tbl))) {
   if (nrow(tbl) == 0 || ncol(tbl) == 0) return(fallback_col)
   for (r in search_rows) {
@@ -94,7 +33,7 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
   fallback_col
 }
 
-# detect reference month from a01 sheet 1
+# infer reference month from the last lfs period label in a01 sheet 1
 .detect_manual_month_from_a01 <- function(file_a01) {
   if (is.null(file_a01)) return(NULL)
   tbl <- .read_sheet(file_a01, "1")
@@ -117,7 +56,6 @@ if (!exists("COVID_DATE",         inherits = TRUE)) source("utils/config.R")
 }
 
 
-# main entry point
 run_calculations_from_excel <- function(manual_month = NULL,
                                         file_a01 = NULL,
                                         file_hr1 = NULL,
@@ -137,7 +75,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   cm       <- parse_manual_month(manual_month)
   anchor_m <- cm %m-% months(2)
 
-  # comparison periods
+  # lfs end dates for each comparison window
   lfs_end_cur   <- anchor_m
   lfs_end_q     <- anchor_m %m-% months(3)
   lfs_end_y     <- anchor_m %m-% months(12)
@@ -151,7 +89,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   lab_elec  <- .lfs_label(lfs_end_elec)
   
   
-  # a01 sheet 1: I=unemp rate 16+, O=inact level 16-64, Q=emp rate 16-64, S=inact rate 16-64
+  # a01 sheet 1 column mapping: D=emp level, E=unemp level, I=unemp rate, O=inact level, Q=emp rate, S=inact rate
   tbl_1 <- if (!is.null(file_a01)) .read_sheet(file_a01, "1") else data.frame()
   
   .lfs_metric <- function(tbl, col, labels) {
@@ -189,11 +127,11 @@ run_calculations_from_excel <- function(manual_month = NULL,
     assign(paste0(prefix, "_de"),  m$de,  envir = target_env)
   }
   
-  # a01 sheet 2: BD(56)=inact 50-64 level, BE(57)=inact 50-64 rate
+  # a01 sheet 2: col BD(56)=inact 50-64 level, col BE(57)=inact 50-64 rate
   tbl_2 <- if (!is.null(file_a01)) .read_sheet(file_a01, "2") else data.frame()
-  
-  m_5064   <- .lfs_metric(tbl_2, 56, all_labels)  # Col BD: inactivity 50-64 level
-  m_5064rt <- .lfs_metric(tbl_2, 57, all_labels)  # Col BE: inactivity 50-64 rate
+
+  m_5064   <- .lfs_metric(tbl_2, 56, all_labels)
+  m_5064rt <- .lfs_metric(tbl_2, 57, all_labels)
   
   for (prefix in c("inact5064", "inact5064_rt")) {
     m <- if (prefix == "inact5064") m_5064 else m_5064rt
@@ -204,11 +142,11 @@ run_calculations_from_excel <- function(manual_month = NULL,
     assign(paste0(prefix, "_de"),  m$de,  envir = target_env)
   }
   
-  # a01 sheet 10: B(2)=level, C(3)=rate per 1000
+  # a01 sheet 10: col B(2)=redundancy level, col C(3)=rate per 1000
   tbl_10 <- if (!is.null(file_a01)) .read_sheet(file_a01, "10") else data.frame()
-  
-  m_redund <- .lfs_metric(tbl_10, 3, all_labels)  # Col C: rate per 1000
-  m_redund_level <- .lfs_metric(tbl_10, 2, all_labels)  # Col B: level
+
+  m_redund <- .lfs_metric(tbl_10, 3, all_labels)
+  m_redund_level <- .lfs_metric(tbl_10, 2, all_labels)
   
   assign("redund_cur", m_redund$cur, envir = target_env)
   assign("redund_dq",  m_redund$dq,  envir = target_env)
@@ -217,7 +155,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   assign("redund_de",  m_redund$de,  envir = target_env)
   
   
-  # a01 sheet 13: AWE total pay — B(2)=weekly £, D(4)=3m avg % yoy
+  # a01 sheet 13: awe total pay - col B(2)=weekly gbp, col D(4)=3m avg % yoy
   tbl_13 <- if (!is.null(file_a01)) .read_sheet(file_a01, "13") else data.frame()
   
   if (nrow(tbl_13) > 0 && ncol(tbl_13) >= 4) {
@@ -252,7 +190,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
     win3 <- c(anchor_m, anchor_m %m-% months(1), anchor_m %m-% months(2))
   }
   
-  # a01 sheet 15: AWE regular pay — D(4)=3m avg % yoy
+  # a01 sheet 15: awe regular pay - col D(4)=3m avg % yoy
   tbl_15 <- if (!is.null(file_a01)) .read_sheet(file_a01, "15") else data.frame()
   
   if (nrow(tbl_15) > 0 && ncol(tbl_15) >= 4) {
@@ -310,7 +248,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   assign("wages_reg_private",     wages_reg_private,     envir = target_env)
   assign("wages_reg_qchange",     wages_reg_qchange,     envir = target_env)
 
-  # x09 sheet AWE Real_CPI: A(1)=datetime, B(2)=real AWE £, E(5)=total % yoy, I(9)=regular % yoy
+  # x09 "AWE Real_CPI" sheet: col B(2)=real awe gbp, col E(5)=total % yoy, col I(9)=regular % yoy
   tbl_cpi <- if (!is.null(file_x09)) .read_sheet(file_x09, "AWE Real_CPI") else data.frame()
   
   if (nrow(tbl_cpi) > 0 && ncol(tbl_cpi) >= 9) {
@@ -371,7 +309,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   # a01 sheet 19: vacancies
   tbl_19 <- if (!is.null(file_a01)) .read_sheet(file_a01, "19") else data.frame()
 
-  # vac_end_override is only passed from dashboard preview; otherwise use latest
+  # override only comes from dashboard preview; otherwise we take the latest available
   vac_lab_covid <- "Jan-Mar 2020"
   vac_lab_elec  <- .lfs_label(ELEC24_DATE)
 
@@ -431,7 +369,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   tbl_18 <- if (!is.null(file_a01)) .read_sheet(file_a01, "18") else data.frame()
 
   if (nrow(tbl_18) > 0 && ncol(tbl_18) >= 2) {
-    # strip revision markers [r], [p], [x] before date parsing
+    # ons marks revisions with [r], [p], [x] which break date parsing
     dl_raw <- gsub("\\s*\\[.*?\\]\\s*", "", as.character(tbl_18[[1]]))
     dl_dates <- .detect_dates(dl_raw)
     dl_vals  <- suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(tbl_18[[2]]))))
@@ -494,7 +432,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
     elec_base  <- .avg_by_dates(pay_df$m, pay_df$v, seq(ELEC24_DATE %m-% months(2), by = "month", length.out = 3))
     payroll_de <- if (!is.na(payroll_cur) && !is.na(elec_base)) payroll_cur - (elec_base / 1000) else NA_real_
 
-    # flash — always use the true latest date in the file
+    # flash uses the absolute latest date regardless of any override
     flash_anchor <- pay_df$m[nrow(pay_df)]
     flash_val    <- .val_by_date(pay_df$m, pay_df$v, flash_anchor)
     flash_prev_m <- .val_by_date(pay_df$m, pay_df$v, flash_anchor %m-% months(1))
@@ -571,7 +509,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
     assign(paste0(prefix, "_de"),  s$de,  envir = target_env)
   }
   
-  # hr1 sheet 1a: A(1)=datetime, M(13)=GB total
+  # hr1 sheet 1a: col M(13) = gb total
   hr1_tbl <- if (!is.null(file_hr1)) .read_sheet(file_hr1, "1a") else data.frame()
 
   if (nrow(hr1_tbl) > 0 && ncol(hr1_tbl) >= 13) {
@@ -613,7 +551,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   assign("hr1_de",  hr1_de,  envir = target_env)
   assign("hr1_month_label", hr1_month_label, envir = target_env)
   
-  # labels
+  # period labels for the word template
   lfs_period_label       <- lfs_label_narrative(lfs_end_cur)
   lfs_period_short_label <- make_lfs_label(lfs_end_cur)
   vacancies_period_label <- lfs_label_narrative(vac_end)

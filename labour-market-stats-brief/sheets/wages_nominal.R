@@ -1,4 +1,4 @@
-# wages nominal module - a01 sheet 13 (total) + sheet 15 (regular)
+# a01 sheet 13 (total) + sheet 15 (regular) - nominal wages
 
 WAGES_NOM_CODES <- list(
   WEEKLY_TOTAL      = "KAB9",
@@ -59,17 +59,15 @@ compute_wages_nominal <- function(pg_total, pg_regular, manual_mm) {
   covid3    <- seq(COVID_DATE,               by = "-1 month", length.out = 3)
   election3 <- seq(ELEC24_DATE,              by = "-1 month", length.out = 3)
 
-  # current yoy % (single month)
   latest_total <- get_nom_val(pg_total, anchor_m, WAGES_NOM_CODES$YOY_TOTAL)
   latest_reg   <- get_nom_val(pg_regular, anchor_m, WAGES_NOM_CODES$YOY_REG)
 
-  # public/private sector yoy %
   total_public  <- get_nom_val(pg_total,   anchor_m, WAGES_NOM_CODES$YOY_TOTAL_PUBLIC)
   total_private <- get_nom_val(pg_total,   anchor_m, WAGES_NOM_CODES$YOY_TOTAL_PRIVATE)
   reg_public    <- get_nom_val(pg_regular, anchor_m, WAGES_NOM_CODES$YOY_REG_PUBLIC)
   reg_private   <- get_nom_val(pg_regular, anchor_m, WAGES_NOM_CODES$YOY_REG_PRIVATE)
 
-  # quarter-on-quarter change in yoy %
+  # qoq movement in the yoy % figure
   prev_q_anchor <- anchor_m %m-% months(3)
   total_qchange <- {
     v1 <- get_nom_val(pg_total,   anchor_m,     WAGES_NOM_CODES$YOY_TOTAL)
@@ -82,7 +80,7 @@ compute_wages_nominal <- function(pg_total, pg_regular, manual_mm) {
     if (!is.na(v1) && !is.na(v2)) v1 - v2 else NA_real_
   }
 
-  # annualised £ changes: 3mo avg weekly difference * 52
+  # annualised by multiplying weekly difference by 52
   calc_change <- function(pg, dates_a, dates_b, code) {
     a <- get_nom_avg(pg, dates_a, code)
     b <- get_nom_avg(pg, dates_b, code)

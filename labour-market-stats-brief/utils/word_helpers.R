@@ -1,7 +1,5 @@
-# word_helpers.R - shared formatters, replacers, and oecd helpers for word output
-#
-# sourced by both word_output.R (database mode) and manual_word_output.R (excel mode)
-# to avoid duplicating these functions across both files.
+# shared formatters, replacers, and oecd helpers for word output
+# sourced by both word_output.R and manual_word_output.R
 
 suppressPackageStartupMessages({
   library(officer)
@@ -10,8 +8,7 @@ suppressPackageStartupMessages({
 })
 
 # -- formatters --
-# these try to use the helpers.R versions if available, falling back to local logic.
-# this lets the word output scripts work standalone or after helpers.R has been sourced.
+# fall back to local logic if helpers.R hasn't been sourced yet
 
 fmt_one_dec <- function(x) {
   x <- suppressWarnings(as.numeric(x))
@@ -62,16 +59,16 @@ fmt_int_signed <- function(x) {
   if (x > 0) paste0("+", s) else if (x < 0) paste0("-", s) else "0"
 }
 
-# counts stored as persons; displayed in 000s
+# lfs counts are persons; we display in 000s
 fmt_count_000s_current <- function(x) .format_int(x / 1000)
 fmt_count_000s_change  <- function(x) fmt_int_signed(x / 1000)
 
-# payroll/vacancies already in 000s
+# payroll/vacancies are already in 000s so no division needed
 fmt_exempt_current <- function(x) .format_int(x)
 fmt_exempt_change  <- function(x) fmt_int_signed(x)
 
 # -- month label --
-# converts "mar2026" or "2025-10" to "March 2026"
+# e.g. "mar2026" or "2025-10" -> "March 2026"
 
 manual_month_to_label <- function(x) {
   if (is.null(x) || length(x) == 0 || is.na(x)) return("")
@@ -94,7 +91,7 @@ manual_month_to_label <- function(x) {
 }
 
 # -- docx replacement --
-# replaces placeholder text in body, headers, and footers of a word doc
+# replaces placeholders in body, headers, and footers
 
 replace_all <- function(doc, key, val) {
   if (is.null(val) || length(val) == 0 || is.na(val)) val <- ""
@@ -117,7 +114,7 @@ replace_all <- function(doc, key, val) {
   doc
 }
 
-# conditional fill — picks the p/n/z placeholder based on sign of value_num
+# picks the p/n/z placeholder variant based on sign of value_num
 fill_conditional <- function(doc, base, value_text, value_num, invert = FALSE, neutral = FALSE) {
   value_num <- suppressWarnings(as.numeric(value_num))
 
@@ -140,12 +137,12 @@ fill_conditional <- function(doc, base, value_text, value_num, invert = FALSE, n
   doc
 }
 
-# safe variable lookup — returns the value of a global variable or a default
+# safe global variable lookup with default
 sv <- function(name, default = NA_real_) {
   if (exists(name, inherits = TRUE)) get(name, inherits = TRUE) else default
 }
 
-# -- oecd comparison data --
+# -- oecd international comparison data --
 
 .oecd_countries <- c(
   "United Kingdom", "United States", "France", "Germany",
@@ -165,7 +162,7 @@ sv <- function(name, default = NA_real_) {
                        "Euro area (19 countries)", "EA20", "EA19", "EA")
 )
 
-# fills oecd placeholders in the word doc for all 9 countries
+# fills oecd placeholders for all 9 countries
 .fill_oecd_placeholders <- function(doc, unemp_data, emp_data, inact_data) {
   country_codes <- c("United Kingdom" = "uk", "United States" = "us",
                      "France" = "fr", "Germany" = "de", "Italy" = "it",
