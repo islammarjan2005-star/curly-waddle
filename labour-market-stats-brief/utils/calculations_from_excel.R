@@ -107,12 +107,12 @@ run_calculations_from_excel <- function(manual_month = NULL,
   
   all_labels <- c(lab_cur, lab_q, lab_y, lab_covid, lab_elec)
   
-  m_emp16   <- .lfs_metric(tbl_1, 4,  all_labels)   # Col D: employment 16+ level
-  m_emprt   <- .lfs_metric(tbl_1, 17, all_labels)   # Col Q: employment rate 16-64
-  m_unemp16 <- .lfs_metric(tbl_1, 5,  all_labels)   # Col E: unemployment 16+ level
-  m_unemprt <- .lfs_metric(tbl_1, 9,  all_labels)   # Col I: unemployment rate 16+
-  m_inact   <- .lfs_metric(tbl_1, 15, all_labels)   # Col O: inactivity level 16-64
-  m_inactrt <- .lfs_metric(tbl_1, 19, all_labels)   # Col S: inactivity rate 16-64
+  m_emp16   <- .lfs_metric(tbl_1, 4,  all_labels)   # col D: employment 16+ level
+  m_emprt   <- .lfs_metric(tbl_1, 17, all_labels)   # col Q: employment rate 16-64
+  m_unemp16 <- .lfs_metric(tbl_1, 5,  all_labels)   # col E: unemployment 16+ level
+  m_unemprt <- .lfs_metric(tbl_1, 9,  all_labels)   # col I: unemployment rate 16+
+  m_inact   <- .lfs_metric(tbl_1, 15, all_labels)   # col O: inactivity level 16-64
+  m_inactrt <- .lfs_metric(tbl_1, 19, all_labels)   # col S: inactivity rate 16-64
   
   for (prefix in c("emp16", "emp_rt", "unemp16", "unemp_rt", "inact", "inact_rt")) {
     m <- switch(prefix,
