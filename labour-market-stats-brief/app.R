@@ -2345,19 +2345,21 @@ server <- function(input, output, session) {
   output$manual_copilot_btn <- renderUI({
     prompt <- .build_ai_prompt()
     if (is.null(prompt)) return(NULL)
-    escaped <- gsub("'", "\\\\'", gsub("\n", "\\\\n", prompt))
-    js <- sprintf("navigator.clipboard.writeText('%s').then(function(){alert('Prompt copied to clipboard — paste into any AI assistant.')});", escaped)
+    encoded <- utils::URLencode(prompt, reserved = TRUE)
+    url <- paste0("https://copilot.microsoft.com/?q=", encoded)
     tags$button(class = "govuk-button govuk-button--secondary", style = "margin-left: 8px;",
-                onclick = js, "Draft Commentary (AI)")
+                onclick = paste0("window.open('", url, "','_blank');"),
+                "Draft Commentary (AI)")
   })
 
   output$auto_copilot_btn <- renderUI({
     prompt <- .build_ai_prompt()
     if (is.null(prompt)) return(NULL)
-    escaped <- gsub("'", "\\\\'", gsub("\n", "\\\\n", prompt))
-    js <- sprintf("navigator.clipboard.writeText('%s').then(function(){alert('Prompt copied to clipboard — paste into any AI assistant.')});", escaped)
+    encoded <- utils::URLencode(prompt, reserved = TRUE)
+    url <- paste0("https://copilot.microsoft.com/?q=", encoded)
     tags$button(class = "govuk-button govuk-button--secondary", style = "margin-left: 8px;",
-                onclick = js, "Draft Commentary (AI)")
+                onclick = paste0("window.open('", url, "','_blank');"),
+                "Draft Commentary (AI)")
   })
 }
 
