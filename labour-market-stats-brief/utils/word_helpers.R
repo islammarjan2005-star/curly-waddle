@@ -162,7 +162,121 @@ sv <- function(name, default = NA_real_) {
                        "Euro area (19 countries)", "EA20", "EA19", "EA")
 )
 
-# fills oecd placeholders for all 9 countries
+.g7_members <- c("United Kingdom", "United States", "France", "Germany",
+                 "Italy", "Canada", "Japan")
+
+# compute g7 average for one metric
+.compute_g7_average <- function(data) {
+  if (is.null(data)) return(list(period = "", value = NA_real_))
+  g7 <- data[data$country %in% .g7_members, , drop = FALSE]
+  if (nrow(g7) == 0) return(list(period = "", value = NA_real_))
+  periods <- sort(unique(g7$period), decreasing = TRUE)
+  list(period = periods[1], value = mean(g7$value, na.rm = TRUE))
+}
+
+# generate three oecd comparison bullet points
+.generate_oecd_bullets <- function(unemp_data, emp_data, inact_data) {
+  .val <- function(data, country) {
+    if (is.null(data)) return(NA_real_)
+    idx <- match(country, data$country)
+    if (is.na(idx)) NA_real_ else data$value[idx]
+  }
+
+  .ordinal <- function(n) {
+    if (n == 1) return("the")
+    sfx <- c("st", "nd", "rd", rep("th", 17))
+    paste0("the ", n, if (n <= 20) sfx[n] else "th")
+  }
+
+  .list_countries <- function(countries) {
+    display <- c("United Kingdom" = "the UK", "United States" = "the US",
+                 "France" = "France", "Germany" = "Germany", "Italy" = "Italy",
+                 "Canada" = "Canada", "Japan" = "Japan")
+    nms <- vapply(countries, function(n) if (n %in% names(display)) display[[n]] else n, "")
+    if (length(nms) == 0) return("")
+    if (length(nms) == 1) return(nms)
+    paste0(paste(nms[-length(nms)], collapse = ", "), " and ", nms[length(nms)])
+  }
+
+  .pp <- function(x) paste0(fmt_one_dec(abs(x)), "ppts")
+
+  uk_ur <- .val(unemp_data, "United Kingdom")
+  uk_er <- .val(emp_data,   "United Kingdom")
+  uk_ir <- .val(inact_data, "United Kingdom")
+  ea_ur <- .val(unemp_data, "Euro area")
+  ea_er <- .val(emp_data,   "Euro area")
+  ea_ir <- .val(inact_data, "Euro area")
+  g7_ur <- .compute_g7_average(unemp_data)$value
+  g7_er <- .compute_g7_average(emp_data)$value
+  g7_ir <- .compute_g7_average(inact_data)$value
+
+  # bullet 1: unemployment (lower is better)
+  b1 <- ""
+  if (!is.na(uk_ur)) {
+    g7_vals <- vapply(.g7_members, function(c) .val(unemp_data, c), 0.0)
+    valid   <- .g7_members[!is.na(g7_vals)]
+    vals    <- g7_vals[!is.na(g7_vals)]
+    rank    <- sum(vals < uk_ur) + 1
+    worse   <- valid[vals > uk_ur]
+    b1 <- paste0("The UK has ", .ordinal(rank), " lowest unemployment rate in the G7")
+    if (length(worse) > 0) b1 <- paste0(b1, ": lower than ", .list_countries(worse))
+    b1 <- paste0(b1, ".")
+    if (!is.na(ea_ur)) {
+      diff_ea <- uk_ur - ea_ur
+      dir <- if (diff_ea < 0) "below" else "above"
+      b1 <- paste0(b1, " The UK unemployment rate is ", .pp(diff_ea), " ", dir,
+                   " the Euro Area average*.")
+    }
+  }
+
+  # bullet 2: employment (higher is better)
+  b2 <- ""
+  if (!is.na(uk_er)) {
+    g7_vals <- vapply(.g7_members, function(c) .val(emp_data, c), 0.0)
+    valid   <- .g7_members[!is.na(g7_vals)]
+    vals    <- g7_vals[!is.na(g7_vals)]
+    rank    <- sum(vals > uk_er) + 1
+    worse   <- valid[vals < uk_er]
+    b2 <- paste0("The UK has ", .ordinal(rank), " highest employment rate among the G7")
+    if (length(worse) > 0) b2 <- paste0(b2, ": higher than ", .list_countries(worse))
+    b2 <- paste0(b2, ".")
+    if (!is.na(ea_er) && !is.na(g7_er)) {
+      diff_ea <- uk_er - ea_er
+      diff_g7 <- uk_er - g7_er
+      dir_ea <- if (diff_ea > 0) "above" else "below"
+      b2 <- paste0(b2, " The UK employment rate is ", .pp(diff_ea), " and ", .pp(diff_g7),
+                   " ", dir_ea, " the Euro Area and G7 averages respectively*.")
+    } else if (!is.na(ea_er)) {
+      diff_ea <- uk_er - ea_er
+      dir <- if (diff_ea > 0) "above" else "below"
+      b2 <- paste0(b2, " The UK employment rate is ", .pp(diff_ea), " ", dir,
+                   " the Euro Area average*.")
+    }
+  }
+
+  # bullet 3: inactivity (lower is better)
+  b3 <- ""
+  if (!is.na(uk_ir)) {
+    g7_vals <- vapply(.g7_members, function(c) .val(inact_data, c), 0.0)
+    valid   <- .g7_members[!is.na(g7_vals)]
+    vals    <- g7_vals[!is.na(g7_vals)]
+    rank    <- sum(vals < uk_ir) + 1
+    worse   <- valid[vals > uk_ir]
+    b3 <- paste0("The UK has ", .ordinal(rank), " lowest inactivity rate among the G7")
+    if (length(worse) > 0) b3 <- paste0(b3, ": lower than ", .list_countries(worse))
+    b3 <- paste0(b3, ".")
+    if (!is.na(ea_ir)) {
+      diff_ea <- uk_ir - ea_ir
+      dir <- if (diff_ea < 0) "below" else "above"
+      b3 <- paste0(b3, " The UK inactivity rate is ", .pp(diff_ea), " ", dir,
+                   " the Euro area average*.")
+    }
+  }
+
+  list(bullet1 = b1, bullet2 = b2, bullet3 = b3)
+}
+
+# fills oecd placeholders for all countries, g7 average, and bullets
 .fill_oecd_placeholders <- function(doc, unemp_data, emp_data, inact_data) {
   country_codes <- c("United Kingdom" = "uk", "United States" = "us",
                      "France" = "fr", "Germany" = "de", "Italy" = "it",
@@ -191,5 +305,22 @@ sv <- function(name, default = NA_real_) {
     doc <- replace_all(doc, paste0("qvzoecd", cc, "er"), e$value)
     doc <- replace_all(doc, paste0("qvzoecd", cc, "ir"), ia$value)
   }
+
+  # g7 average row
+  g7u  <- .compute_g7_average(unemp_data)
+  g7e  <- .compute_g7_average(emp_data)
+  g7ia <- .compute_g7_average(inact_data)
+  g7tp <- if (nzchar(g7u$period)) g7u$period else if (nzchar(g7e$period)) g7e$period else g7ia$period
+  doc <- replace_all(doc, "qvzoecdg7tp", if (is.na(g7tp) || !nzchar(g7tp)) "" else g7tp)
+  doc <- replace_all(doc, "qvzoecdg7ur", if (is.na(g7u$value)) "" else paste0(fmt_one_dec(g7u$value), "%"))
+  doc <- replace_all(doc, "qvzoecdg7er", if (is.na(g7e$value)) "" else paste0(fmt_one_dec(g7e$value), "%"))
+  doc <- replace_all(doc, "qvzoecdg7ir", if (is.na(g7ia$value)) "" else paste0(fmt_one_dec(g7ia$value), "%"))
+
+  # bullet points
+  bullets <- .generate_oecd_bullets(unemp_data, emp_data, inact_data)
+  doc <- replace_all(doc, "qvzoecdbullet1", bullets$bullet1)
+  doc <- replace_all(doc, "qvzoecdbullet2", bullets$bullet2)
+  doc <- replace_all(doc, "qvzoecdbullet3", bullets$bullet3)
+
   doc
 }

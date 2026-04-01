@@ -1522,7 +1522,8 @@ server <- function(input, output, session) {
           )
           raw <- DBI::dbGetQuery(conn, query)
           if (nrow(raw) == 0) return(NULL)
-          # pick latest row per country
+          # skip NA values then pick latest row per country
+          raw <- raw[!is.na(raw$obs_value) & nzchar(raw$obs_value), , drop = FALSE]
           raw <- raw[!duplicated(raw$ref_area), , drop = FALSE]
           country_map <- c(GBR = "United Kingdom", USA = "United States", FRA = "France",
                            DEU = "Germany", ITA = "Italy", ESP = "Spain",
@@ -1556,43 +1557,8 @@ server <- function(input, output, session) {
         return()
       }
 
-      # build preview table
-      country_order <- c("United Kingdom", "United States", "France", "Germany",
-                         "Italy", "Spain", "Canada", "Japan", "Euro area")
-
-      .get_val <- function(data, country) {
-        if (is.null(data)) return(list(period = NA_character_, value = NA_character_))
-        idx <- match(country, data$country)
-        if (is.na(idx)) return(list(period = NA_character_, value = NA_character_))
-        list(
-          period = data$period[idx],
-          value  = paste0(formatC(round(data$value[idx], 1), format = "f", digits = 1), "%")
-        )
-      }
-
-      display_names <- c(
-        "United Kingdom" = "UK", "United States" = "United States",
-        "France" = "France", "Germany" = "Germany", "Italy" = "Italy",
-        "Spain" = "Spain", "Canada" = "Canada", "Japan" = "Japan",
-        "Euro area" = "Euro Area"
-      )
-
-      rows <- lapply(country_order, function(country) {
-        u  <- .get_val(unemp_data, country)
-        e  <- .get_val(emp_data,   country)
-        ia <- .get_val(inact_data, country)
-        tp <- if (!is.na(u$period)) u$period else if (!is.na(e$period)) e$period else ia$period
-        if (country == "United Kingdom" && !is.na(tp)) tp <- paste0(tp, "*")
-        list(
-          country = display_names[[country]],
-          period  = if (is.na(tp)) "\u2014" else tp,
-          unemp   = if (is.na(u$value))  "\u2014" else u$value,
-          emp     = if (is.na(e$value))  "\u2014" else e$value,
-          inact   = if (is.na(ia$value)) "\u2014" else ia$value
-        )
-      })
-
-      oecd_preview_data(rows)
+      preview <- .build_oecd_preview(unemp_data, emp_data, inact_data)
+      oecd_preview_data(preview)
       incProgress(0.3, detail = "done")
     })
 
@@ -1899,6 +1865,77 @@ server <- function(input, output, session) {
   
   # manual preview: oecd
   oecd_preview_data <- reactiveVal(NULL)
+
+  # shared builder for oecd preview — used by both manual and auto tabs
+  .build_oecd_preview <- function(unemp_data, emp_data, inact_data) {
+    country_order <- c("United Kingdom", "United States", "France", "Germany",
+                       "Italy", "Spain", "Canada", "Japan", "Euro area")
+    g7_members <- c("United Kingdom", "United States", "France", "Germany",
+                    "Italy", "Canada", "Japan")
+
+    .get_val <- function(data, country) {
+      if (is.null(data)) return(list(period = NA_character_, value = NA_real_))
+      idx <- match(country, data$country)
+      if (is.na(idx)) return(list(period = NA_character_, value = NA_real_))
+      list(period = data$period[idx], value = data$value[idx])
+    }
+
+    .fmt <- function(v) {
+      if (is.na(v)) "\u2014" else paste0(formatC(round(v, 1), format = "f", digits = 1), "%")
+    }
+
+    display_names <- c(
+      "United Kingdom" = "UK", "United States" = "United States",
+      "France" = "France", "Germany" = "Germany", "Italy" = "Italy",
+      "Spain" = "Spain", "Canada" = "Canada", "Japan" = "Japan",
+      "Euro area" = "Euro Area"
+    )
+
+    rows <- lapply(country_order, function(country) {
+      u  <- .get_val(unemp_data, country)
+      e  <- .get_val(emp_data,   country)
+      ia <- .get_val(inact_data, country)
+      tp <- if (!is.na(u$period)) u$period else if (!is.na(e$period)) e$period else ia$period
+      if (country == "United Kingdom" && !is.na(tp)) tp <- paste0(tp, "*")
+      list(
+        country = display_names[[country]],
+        period  = if (is.na(tp)) "\u2014" else tp,
+        unemp   = .fmt(u$value),
+        emp     = .fmt(e$value),
+        inact   = .fmt(ia$value)
+      )
+    })
+
+    # g7 average row — insert between Japan (index 8) and Euro Area (index 9)
+    .g7_avg <- function(data) {
+      if (is.null(data)) return(NA_real_)
+      vals <- data$value[data$country %in% g7_members]
+      if (length(vals) == 0) return(NA_real_)
+      mean(vals, na.rm = TRUE)
+    }
+    g7_ur <- .g7_avg(unemp_data); g7_er <- .g7_avg(emp_data); g7_ir <- .g7_avg(inact_data)
+    # g7 average period: latest common or latest available
+    g7_periods <- character(0)
+    for (d in list(unemp_data, emp_data, inact_data)) {
+      if (!is.null(d)) {
+        p <- d$period[d$country %in% g7_members]
+        g7_periods <- c(g7_periods, p[!is.na(p)])
+      }
+    }
+    g7_tp <- if (length(g7_periods) > 0) sort(unique(g7_periods), decreasing = TRUE)[1] else "\u2014"
+
+    g7_row <- list(
+      country = "G7 Average", period = g7_tp,
+      unemp = .fmt(g7_ur), emp = .fmt(g7_er), inact = .fmt(g7_ir)
+    )
+    rows <- append(rows, list(g7_row), after = 8)
+
+    # generate bullet points
+    source("utils/word_helpers.R", local = TRUE)
+    bullets <- .generate_oecd_bullets(unemp_data, emp_data, inact_data)
+
+    list(rows = rows, bullets = bullets)
+  }
   
   observeEvent(input$manual_preview_oecd, {
     has_any <- !is.null(uploaded_files$oecd_unemp) ||
@@ -1926,43 +1963,8 @@ server <- function(input, output, session) {
         tryCatch(.read_oecd_latest(uploaded_files$oecd_inact), error = function(e) NULL)
       else NULL
 
-      # build preview table
-      country_order <- c("United Kingdom", "United States", "France", "Germany",
-                         "Italy", "Spain", "Canada", "Japan", "Euro area")
-
-      .get_val <- function(data, country) {
-        if (is.null(data)) return(list(period = NA_character_, value = NA_character_))
-        idx <- match(country, data$country)
-        if (is.na(idx)) return(list(period = NA_character_, value = NA_character_))
-        list(
-          period = data$period[idx],
-          value  = paste0(formatC(round(data$value[idx], 1), format = "f", digits = 1), "%")
-        )
-      }
-
-      display_names <- c(
-        "United Kingdom" = "UK", "United States" = "United States",
-        "France" = "France", "Germany" = "Germany", "Italy" = "Italy",
-        "Spain" = "Spain", "Canada" = "Canada", "Japan" = "Japan",
-        "Euro area" = "Euro Area"
-      )
-
-      rows <- lapply(country_order, function(country) {
-        u  <- .get_val(unemp_data, country)
-        e  <- .get_val(emp_data,   country)
-        ia <- .get_val(inact_data, country)
-        tp <- if (!is.na(u$period)) u$period else if (!is.na(e$period)) e$period else ia$period
-        if (country == "United Kingdom" && !is.na(tp)) tp <- paste0(tp, "*")
-        list(
-          country = display_names[[country]],
-          period  = if (is.na(tp)) "—" else tp,
-          unemp   = if (is.na(u$value))  "—" else u$value,
-          emp     = if (is.na(e$value))  "—" else e$value,
-          inact   = if (is.na(ia$value)) "—" else ia$value
-        )
-      })
-
-      oecd_preview_data(rows)
+      preview <- .build_oecd_preview(unemp_data, emp_data, inact_data)
+      oecd_preview_data(preview)
       incProgress(0.2, detail = "done")
     })
 
@@ -2243,10 +2245,12 @@ server <- function(input, output, session) {
   
   # render: oecd preview
   output$oecd_preview <- renderUI({
-    rows <- oecd_preview_data()
-    if (is.null(rows)) {
+    pd <- oecd_preview_data()
+    if (is.null(pd)) {
       return(p(class = "govuk-body", "Click 'OECD' to preview uploaded international data."))
     }
+    rows    <- pd$rows
+    bullets <- pd$bullets
 
     # match word briefing table styling
     header_style <- paste0(
@@ -2296,6 +2300,18 @@ server <- function(input, output, session) {
       ))
     )
 
+    # bullet points below footnote
+    bullet_html <- NULL
+    if (!is.null(bullets)) {
+      blist <- Filter(nzchar, c(bullets$bullet1, bullets$bullet2, bullets$bullet3))
+      if (length(blist) > 0) {
+        bullet_html <- tags$ul(
+          style = "margin-top:12px; font-size:13px; line-height:1.6;",
+          lapply(blist, function(b) tags$li(style = "margin-bottom:6px;", tags$strong(b)))
+        )
+      }
+    }
+
     tagList(
       div(style = "overflow-x:auto; margin-bottom:8px;",
         tags$table(
@@ -2304,7 +2320,8 @@ server <- function(input, output, session) {
           tags$tbody(data_rows)
         )
       ),
-      footnote
+      footnote,
+      bullet_html
     )
   })
 }

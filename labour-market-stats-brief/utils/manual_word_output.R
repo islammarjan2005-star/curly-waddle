@@ -79,12 +79,16 @@ source("utils/word_helpers.R", local = FALSE)
     rows <- df[tolower(trimws(df[[ref_col]])) %in% aliases, , drop = FALSE]
     if (nrow(rows) == 0) next
     rows <- rows[order(rows[[time_col]], decreasing = TRUE), ]
-    val <- suppressWarnings(as.numeric(rows[[val_col]][1]))
-    if (!is.na(val)) {
-      results <- rbind(results, data.frame(
-        country = target, period = trimws(rows[[time_col]][1]), value = val,
-        stringsAsFactors = FALSE
-      ))
+    # skip rows with NA values to fall back to next available quarter
+    for (ri in seq_len(nrow(rows))) {
+      val <- suppressWarnings(as.numeric(rows[[val_col]][ri]))
+      if (!is.na(val)) {
+        results <- rbind(results, data.frame(
+          country = target, period = trimws(rows[[time_col]][ri]), value = val,
+          stringsAsFactors = FALSE
+        ))
+        break
+      }
     }
   }
   if (nrow(results) > 0) return(results) else NULL

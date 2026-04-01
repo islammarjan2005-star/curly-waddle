@@ -20,6 +20,7 @@ source("utils/word_helpers.R", local = FALSE)
       )
       raw <- DBI::dbGetQuery(conn, query)
       if (nrow(raw) == 0) return(NULL)
+      raw <- raw[!is.na(raw$obs_value) & nzchar(raw$obs_value), , drop = FALSE]
       raw <- raw[!duplicated(raw$ref_area), , drop = FALSE]
       raw$country <- country_map[raw$ref_area]
       raw$value <- as.numeric(raw$obs_value)
