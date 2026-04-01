@@ -481,8 +481,12 @@ ui <- fluidPage(
                                              div(class = "govuk-form-group",
                                                  tags$label(class = "govuk-label", style = "font-weight:700;", "Reference month"),
                                                  div(class = "govuk-hint", "Type the publication month (e.g. March 2026). Used for ONS download links."),
-                                                 textInput("ref_month_input", label = NULL,
-                                                           placeholder = "e.g. March 2026", width = "320px")
+                                                 div(style = "display: flex; align-items: center; gap: 8px;",
+                                                     textInput("ref_month_input", label = NULL,
+                                                               placeholder = "e.g. March 2026", width = "320px"),
+                                                     actionButton("confirm_ref_month", "Confirm", class = "govuk-button govuk-button--secondary",
+                                                                  style = "margin-bottom: 0; white-space: nowrap;")
+                                                 )
                                              ),
                                              div(class = "govuk-form-group", style = "display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;",
                                                  span(style = "font-size: 14px; white-space: nowrap;",
@@ -494,15 +498,15 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
+                                             uiOutput("download_all_btn"),
+                                             uiOutput("upload_status"),
+
                                              div(class = "govuk-form-group",
                                                  fileInput("upload_files", "Upload ONS Excel files",
                                                            accept = c(".xlsx", ".csv"), multiple = TRUE, width = "100%"),
                                                  div(class = "govuk-hint",
                                                      "Drag or select files. Auto-detected by name: A01, HR1, X09, RTISA, CLA01, X02, OECD.")
                                              ),
-
-                                             uiOutput("upload_status"),
-                                             uiOutput("download_all_btn"),
 
                                              tags$hr(class = "govuk-section-break"),
                                              
@@ -862,7 +866,18 @@ server <- function(input, output, session) {
       `OECD Emp` = uploaded_files$oecd_emp,
       `OECD Inact` = uploaded_files$oecd_inact
     )
-    urls <- ons_download_urls()
+    # landing pages for grey tags (users browse + download manually)
+    landing <- c(
+      A01   = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/summaryoflabourmarketstatistics",
+      HR1   = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/hr1potentialredundancies",
+      X09   = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/x09realaverageweeklyearningsusingconsumerpriceinflationseasonallyadjusted",
+      RTISA = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/realtimeinformationstatisticsreferencetableseasonallyadjusted",
+      CLA01 = "https://www.ons.gov.uk/employmentandlabourmarket/peoplenotinwork/outofworkbenefits/datasets/claimantcountcla01",
+      X02   = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/labourforcesurveyflowsestimatesx02",
+      OECD_UE    = "https://data-explorer.oecd.org/vis?lc=en&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS@DF_IALFS_UNE_M&df[ag]=OECD.SDD.TPS&df[vs]=1.0",
+      OECD_EMP   = "https://data-explorer.oecd.org/vis?lc=en&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS@DF_IALFS_EMP_WAP_Q&df[ag]=OECD.SDD.TPS&df[vs]=1.0",
+      OECD_INACT = "https://data-explorer.oecd.org/vis?df[ds]=DisseminateFinalDMZ&df[id]=DSD_LFS@DF_IALFS_INDIC&df[ag]=OECD.SDD.TPS"
+    )
     # map display names to url keys
     url_key_map <- c(A01 = "A01", HR1 = "HR1", RTISA = "RTISA", X09 = "X09",
                      CLA01 = "CLA01", X02 = "X02",
@@ -872,8 +887,8 @@ server <- function(input, output, session) {
       if (!is.null(all_files[[nm]])) {
         span(class = "govuk-tag govuk-tag--green", style = "margin: 2px;",
              paste0(nm, " \u2713"))
-      } else if (!is.null(url_key) && url_key %in% names(urls)) {
-        tags$a(href = urls[[url_key]], target = "_blank",
+      } else if (!is.null(url_key) && url_key %in% names(landing)) {
+        tags$a(href = landing[[url_key]], target = "_blank",
                style = "text-decoration: none;",
                span(class = "govuk-tag govuk-tag--grey", style = "margin: 2px; cursor: pointer;", nm))
       } else {
@@ -881,14 +896,11 @@ server <- function(input, output, session) {
       }
     })
     mm <- reference_manual_month()
-    month_label <- if (!is.null(mm) && nzchar(mm)) manual_month_to_display(mm) else "the reference month"
-    hint_line <- div(class = "govuk-hint", style = "margin-top: 6px; font-size: 14px;",
-                     paste0("Click a grey button to download data for ", month_label, "."))
     month_line <- if (!is.null(mm) && nzchar(mm) && !is.null(uploaded_files$a01)) {
       div(style = "margin-top: 6px; font-weight: 600;",
           paste0("Reference month: ", manual_month_to_display(mm)))
     }
-    div(style = "margin-top: 10px;", tagList(file_tags), hint_line, month_line)
+    div(style = "margin-top: 10px;", tagList(file_tags), month_line)
   })
   
   # opens all ons download links in new tabs
@@ -898,9 +910,13 @@ server <- function(input, output, session) {
     js_opens <- paste(vapply(ons_keys, function(k) {
       if (k %in% names(urls)) paste0("window.open('", urls[[k]], "','_blank');") else ""
     }, character(1)), collapse = " ")
-    tags$button(class = "govuk-button govuk-button--secondary", style = "margin-top: 8px;",
-                onclick = js_opens,
-                "Download All ONS Files")
+    div(
+      tags$button(class = "govuk-button govuk-button--secondary", style = "margin-top: 8px;",
+                  onclick = js_opens,
+                  "Download All Files"),
+      div(class = "govuk-hint", style = "font-size: 14px;",
+          "If any files fail to download please click on their button below.")
+    )
   })
 
   # detect vacancies periods from a01
@@ -1317,6 +1333,12 @@ server <- function(input, output, session) {
 
   # update ref month when user types in manual tab
   observeEvent(input$ref_month_input, {
+    parsed <- .parse_month_input(input$ref_month_input)
+    if (!is.null(parsed)) reference_manual_month(parsed)
+  }, ignoreInit = TRUE)
+
+  # confirm button triggers same month parsing
+  observeEvent(input$confirm_ref_month, {
     parsed <- .parse_month_input(input$ref_month_input)
     if (!is.null(parsed)) reference_manual_month(parsed)
   }, ignoreInit = TRUE)
