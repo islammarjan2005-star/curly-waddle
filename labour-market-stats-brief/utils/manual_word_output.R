@@ -64,8 +64,9 @@ source("utils/word_helpers.R", local = FALSE)
 }
 
 .parse_oecd_sdmx <- function(df) {
-  ref_col  <- intersect(c("Reference.area", "REF_AREA"), names(df))[1]
-  time_col <- intersect(c("Time.period", "TIME_PERIOD"), names(df))[1]
+  # prefer code columns — label columns can be empty in filtered SDMX exports
+  ref_col  <- intersect(c("REF_AREA", "Reference.area"), names(df))[1]
+  time_col <- intersect(c("TIME_PERIOD", "Time.period"), names(df))[1]
   val_col  <- intersect(c("OBS_VALUE", "Observation.value"), names(df))[1]
   
   if (is.na(ref_col) || is.na(time_col) || is.na(val_col)) return(NULL)

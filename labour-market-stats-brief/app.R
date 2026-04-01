@@ -708,22 +708,23 @@ server <- function(input, output, session) {
         check_sheet <- if (length(sheets) > 0) sheets[1] else NULL
         if (!is.null(check_sheet)) {
           raw <- suppressMessages(readxl::read_excel(path, sheet = check_sheet, n_max = 5))
-          measure_col <- intersect(c("MEASURE", "Measure"), names(raw))
-          if (length(measure_col) > 0) {
-            vals <- tolower(paste(raw[[measure_col[1]]], collapse = " "))
-            if (grepl("une", vals))   return("oecd_unemp")
-            if (grepl("inact", vals)) return("oecd_inact")
-            if (grepl("emp", vals))   return("oecd_emp")
+          measure_cols <- intersect(c("MEASURE", "Measure"), names(raw))
+          if (length(measure_cols) > 0) {
+            vals <- tolower(paste(unique(unlist(raw[measure_cols])), collapse = " "))
+            if (grepl("une", vals))          return("oecd_unemp")
+            if (grepl("inact|olf", vals))    return("oecd_inact")
+            if (grepl("emp_wap|emp", vals))  return("oecd_emp")
           }
         }
       } else if (ext == "csv") {
         raw <- read.csv(path, nrows = 50, stringsAsFactors = FALSE)
-        measure_col <- intersect(c("MEASURE", "Measure"), names(raw))
-        if (length(measure_col) > 0) {
-          vals <- tolower(paste(unique(raw[[measure_col[1]]]), collapse = " "))
-          if (grepl("une", vals))   return("oecd_unemp")
-          if (grepl("inact", vals)) return("oecd_inact")
-          if (grepl("emp", vals))   return("oecd_emp")
+        # check both code and label measure columns for SDMX detection
+        measure_cols <- intersect(c("MEASURE", "Measure"), names(raw))
+        if (length(measure_cols) > 0) {
+          vals <- tolower(paste(unique(unlist(raw[measure_cols])), collapse = " "))
+          if (grepl("une", vals))          return("oecd_unemp")
+          if (grepl("inact|olf", vals))    return("oecd_inact")
+          if (grepl("emp_wap|emp", vals))  return("oecd_emp")
         }
         all_text <- tolower(paste(c(names(raw), unlist(raw[1:min(5, nrow(raw)), ])), collapse = " "))
         if (grepl("unemployment", all_text)) return("oecd_unemp")
