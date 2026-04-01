@@ -284,12 +284,13 @@ sv <- function(name, default = NA_real_) {
                      "Euro area" = "ea")
 
   .get_val <- function(data, country) {
-    if (is.null(data)) return(list(period = "", value = ""))
+    if (is.null(data)) return(list(period = "", value = NA_real_))
     idx <- match(country, data$country)
-    if (is.na(idx)) return(list(period = "", value = ""))
-    list(period = data$period[idx],
-         value = paste0(fmt_one_dec(data$value[idx]), "%"))
+    if (is.na(idx)) return(list(period = "", value = NA_real_))
+    list(period = data$period[idx], value = data$value[idx])
   }
+
+  stale_parts <- character(0)
 
   for (country in names(country_codes)) {
     cc <- country_codes[[country]]
@@ -297,13 +298,37 @@ sv <- function(name, default = NA_real_) {
     e <- .get_val(emp_data, country)
     ia <- .get_val(inact_data, country)
 
-    tp <- if (nzchar(u$period)) u$period else if (nzchar(e$period)) e$period else ia$period
+    # row period = latest available across the three metrics
+    avail <- c(u$period, e$period, ia$period)
+    avail <- avail[nzchar(avail)]
+    tp <- if (length(avail) > 0) sort(avail, decreasing = TRUE)[1] else ""
+
+    # format values, appending ** when from an older period
+    u_str  <- if (is.na(u$value))  "" else paste0(fmt_one_dec(u$value), "%")
+    e_str  <- if (is.na(e$value))  "" else paste0(fmt_one_dec(e$value), "%")
+    ia_str <- if (is.na(ia$value)) "" else paste0(fmt_one_dec(ia$value), "%")
+
+    if (nzchar(tp)) {
+      if (nzchar(u$period) && u$period != tp) {
+        u_str <- paste0(u_str, "**")
+        stale_parts <- c(stale_parts, paste0(country, " unemployment rate from ", u$period))
+      }
+      if (nzchar(e$period) && e$period != tp) {
+        e_str <- paste0(e_str, "**")
+        stale_parts <- c(stale_parts, paste0(country, " employment rate from ", e$period))
+      }
+      if (nzchar(ia$period) && ia$period != tp) {
+        ia_str <- paste0(ia_str, "**")
+        stale_parts <- c(stale_parts, paste0(country, " inactivity rate from ", ia$period))
+      }
+    }
+
     if (cc == "uk" && nzchar(tp)) tp <- paste0(tp, "*")
 
     doc <- replace_all(doc, paste0("qvzoecd", cc, "tp"), tp)
-    doc <- replace_all(doc, paste0("qvzoecd", cc, "ur"), u$value)
-    doc <- replace_all(doc, paste0("qvzoecd", cc, "er"), e$value)
-    doc <- replace_all(doc, paste0("qvzoecd", cc, "ir"), ia$value)
+    doc <- replace_all(doc, paste0("qvzoecd", cc, "ur"), u_str)
+    doc <- replace_all(doc, paste0("qvzoecd", cc, "er"), e_str)
+    doc <- replace_all(doc, paste0("qvzoecd", cc, "ir"), ia_str)
   }
 
   # g7 average row
@@ -315,6 +340,12 @@ sv <- function(name, default = NA_real_) {
   doc <- replace_all(doc, "qvzoecdg7ur", if (is.na(g7u$value)) "" else paste0(fmt_one_dec(g7u$value), "%"))
   doc <- replace_all(doc, "qvzoecdg7er", if (is.na(g7e$value)) "" else paste0(fmt_one_dec(g7e$value), "%"))
   doc <- replace_all(doc, "qvzoecdg7ir", if (is.na(g7ia$value)) "" else paste0(fmt_one_dec(g7ia$value), "%"))
+
+  # ** footnote for older data
+  stale_note <- if (length(stale_parts) > 0) {
+    paste0("**Latest ", paste(stale_parts, collapse = ". "), ".")
+  } else ""
+  doc <- replace_all(doc, "qvzoecdstalenote", stale_note)
 
   # bullet points
   bullets <- .generate_oecd_bullets(unemp_data, emp_data, inact_data)

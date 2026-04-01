@@ -1891,30 +1891,69 @@ server <- function(input, output, session) {
       "Euro area" = "Euro Area"
     )
 
+    # find the most common latest period across all data to detect outliers
+    all_periods <- c(
+      if (!is.null(unemp_data)) unemp_data$period else character(0),
+      if (!is.null(emp_data))   emp_data$period   else character(0),
+      if (!is.null(inact_data)) inact_data$period  else character(0)
+    )
+    all_periods <- all_periods[!is.na(all_periods)]
+
+    footnotes <- character(0)
+
     rows <- lapply(country_order, function(country) {
       u  <- .get_val(unemp_data, country)
       e  <- .get_val(emp_data,   country)
       ia <- .get_val(inact_data, country)
-      tp <- if (!is.na(u$period)) u$period else if (!is.na(e$period)) e$period else ia$period
+
+      # row period = earliest of available metric periods (most conservative)
+      avail <- c(u$period, e$period, ia$period)
+      avail <- avail[!is.na(avail)]
+      tp <- if (length(avail) > 0) sort(avail, decreasing = TRUE)[1] else NA_character_
+
+      # detect cells from older periods and mark with **
+      u_str  <- .fmt(u$value)
+      e_str  <- .fmt(e$value)
+      ia_str <- .fmt(ia$value)
+
+      dname <- display_names[[country]]
+
+      if (!is.na(tp)) {
+        stale <- character(0)
+        if (!is.na(u$period) && u$period != tp) {
+          u_str <- paste0(u_str, "**")
+          stale <- c(stale, paste0(dname, " unemployment rate from ", u$period))
+        }
+        if (!is.na(e$period) && e$period != tp) {
+          e_str <- paste0(e_str, "**")
+          stale <- c(stale, paste0(dname, " employment rate from ", e$period))
+        }
+        if (!is.na(ia$period) && ia$period != tp) {
+          ia_str <- paste0(ia_str, "**")
+          stale <- c(stale, paste0(dname, " inactivity rate from ", ia$period))
+        }
+        if (length(stale) > 0) footnotes <<- c(footnotes, stale)
+      }
+
       if (country == "United Kingdom" && !is.na(tp)) tp <- paste0(tp, "*")
       list(
-        country = display_names[[country]],
+        country = dname,
         period  = if (is.na(tp)) "\u2014" else tp,
-        unemp   = .fmt(u$value),
-        emp     = .fmt(e$value),
-        inact   = .fmt(ia$value)
+        unemp   = u_str,
+        emp     = e_str,
+        inact   = ia_str
       )
     })
 
-    # g7 average row — insert between Japan (index 8) and Euro Area (index 9)
+    # g7 average row
     .g7_avg <- function(data) {
       if (is.null(data)) return(NA_real_)
       vals <- data$value[data$country %in% g7_members]
+      vals <- vals[!is.na(vals)]
       if (length(vals) == 0) return(NA_real_)
-      mean(vals, na.rm = TRUE)
+      mean(vals)
     }
     g7_ur <- .g7_avg(unemp_data); g7_er <- .g7_avg(emp_data); g7_ir <- .g7_avg(inact_data)
-    # g7 average period: latest common or latest available
     g7_periods <- character(0)
     for (d in list(unemp_data, emp_data, inact_data)) {
       if (!is.null(d)) {
@@ -1934,7 +1973,12 @@ server <- function(input, output, session) {
     source("utils/word_helpers.R", local = TRUE)
     bullets <- .generate_oecd_bullets(unemp_data, emp_data, inact_data)
 
-    list(rows = rows, bullets = bullets)
+    # build ** footnote text
+    stale_note <- if (length(footnotes) > 0) {
+      paste0("**Latest ", paste(footnotes, collapse = ". "), ".")
+    } else NULL
+
+    list(rows = rows, bullets = bullets, stale_note = stale_note)
   }
   
   observeEvent(input$manual_preview_oecd, {
@@ -2249,8 +2293,9 @@ server <- function(input, output, session) {
     if (is.null(pd)) {
       return(p(class = "govuk-body", "Click 'OECD' to preview uploaded international data."))
     }
-    rows    <- pd$rows
-    bullets <- pd$bullets
+    rows       <- pd$rows
+    bullets    <- pd$bullets
+    stale_note <- pd$stale_note
 
     # match word briefing table styling
     header_style <- paste0(
@@ -2290,14 +2335,20 @@ server <- function(input, output, session) {
       )
     })
 
-    footnote <- tags$p(
-      style = "font-size:12px; color:#505050; margin-top:10px;",
+    footnote_parts <- list(
       tags$em(paste0(
         "Source: OECD Infra-annual labour statistics. *Latest UK data from ONS Labour Force Survey. ",
-        "¹Note: Included is the latest OECD data. Countries release labour market statistics on different schedules ",
+        "\u00b9Note: Included is the latest OECD data. Countries release labour market statistics on different schedules ",
         "and so reference periods vary, with some outdated. Comparisons should be treated with caution. ",
-        "²Age groups differ from OECD standard where UK data is used."
+        "\u00b2Age groups differ from OECD standard where UK data is used."
       ))
+    )
+    if (!is.null(stale_note)) {
+      footnote_parts <- c(footnote_parts, list(tags$br(), tags$em(stale_note)))
+    }
+    footnote <- tags$p(
+      style = "font-size:12px; color:#505050; margin-top:10px;",
+      footnote_parts
     )
 
     # bullet points below footnote
