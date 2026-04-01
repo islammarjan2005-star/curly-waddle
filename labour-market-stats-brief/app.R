@@ -481,12 +481,8 @@ ui <- fluidPage(
                                              div(class = "govuk-form-group",
                                                  tags$label(class = "govuk-label", style = "font-weight:700;", "Reference month"),
                                                  div(class = "govuk-hint", "Type the publication month (e.g. March 2026). Used for ONS download links."),
-                                                 div(style = "display: flex; align-items: center; gap: 8px;",
-                                                     textInput("ref_month_input", label = NULL,
-                                                               placeholder = "e.g. March 2026", width = "320px"),
-                                                     actionButton("confirm_ref_month", "Confirm", class = "govuk-button govuk-button--secondary",
-                                                                  style = "margin-bottom: 0; white-space: nowrap;")
-                                                 )
+                                                 textInput("ref_month_input", label = NULL,
+                                                           placeholder = "e.g. March 2026", width = "320px")
                                              ),
                                              div(class = "govuk-form-group", style = "display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;",
                                                  span(style = "font-size: 14px; white-space: nowrap;",
@@ -900,7 +896,7 @@ server <- function(input, output, session) {
       div(style = "margin-top: 6px; font-weight: 600;",
           paste0("Reference month: ", manual_month_to_display(mm)))
     }
-    div(style = "margin-top: 10px;", tagList(file_tags), month_line)
+    div(tagList(file_tags), month_line)
   })
   
   # opens all ons download links in new tabs
@@ -911,7 +907,7 @@ server <- function(input, output, session) {
       if (k %in% names(urls)) paste0("window.open('", urls[[k]], "','_blank');") else ""
     }, character(1)), collapse = " ")
     div(
-      tags$button(class = "govuk-button govuk-button--secondary", style = "margin-top: 8px;",
+      tags$button(class = "govuk-button govuk-button--secondary",
                   onclick = js_opens,
                   "Download All Files"),
       div(class = "govuk-hint", style = "font-size: 14px;",
@@ -1333,12 +1329,6 @@ server <- function(input, output, session) {
 
   # update ref month when user types in manual tab
   observeEvent(input$ref_month_input, {
-    parsed <- .parse_month_input(input$ref_month_input)
-    if (!is.null(parsed)) reference_manual_month(parsed)
-  }, ignoreInit = TRUE)
-
-  # confirm button triggers same month parsing
-  observeEvent(input$confirm_ref_month, {
     parsed <- .parse_month_input(input$ref_month_input)
     if (!is.null(parsed)) reference_manual_month(parsed)
   }, ignoreInit = TRUE)
