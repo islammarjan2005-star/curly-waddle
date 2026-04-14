@@ -6,6 +6,24 @@ suppressPackageStartupMessages({
 
 source("utils/word_helpers.R", local = FALSE)
 
+# download an oecd sdmx csv to a cached tempfile (used by manual-mode auto-fetch)
+# returns tempfile path on success, NULL on failure
+.fetch_oecd_sdmx_csv <- function(url, timeout_secs = 30) {
+  if (is.null(url) || !nzchar(url)) return(NULL)
+  old_to <- getOption("timeout")
+  options(timeout = timeout_secs)
+  on.exit(options(timeout = old_to), add = TRUE)
+  tryCatch({
+    tmp <- tempfile(fileext = ".csv")
+    utils::download.file(url, tmp, quiet = TRUE, mode = "wb")
+    if (!file.exists(tmp) || file.info(tmp)$size == 0) return(NULL)
+    tmp
+  }, error = function(e) {
+    warning("OECD SDMX fetch failed (", url, "): ", e$message)
+    NULL
+  })
+}
+
 .read_oecd_latest <- function(path) {
   if (is.null(path) || !file.exists(path)) return(NULL)
   

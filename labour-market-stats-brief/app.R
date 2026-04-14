@@ -494,7 +494,9 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
-                                             uiOutput("download_all_btn"),
+                                             div(class = "govuk-hint", style = "font-size: 14px;",
+                                                 "Download each ONS file individually by clicking its grey tag below. OECD data is fetched automatically \u2014 no upload needed."),
+                                             uiOutput("oecd_auto_status"),
                                              uiOutput("upload_status"),
 
                                              div(class = "govuk-form-group",
@@ -652,7 +654,32 @@ server <- function(input, output, session) {
     oecd_emp = NULL,
     oecd_inact = NULL
   )
-  
+
+  # oecd data auto-fetched from sdmx api (manual mode) - cached tempfile paths
+  # uploaded files take precedence; see .oecd_path() resolver below
+  oecd_auto <- reactiveValues(
+    unemp_path = NULL,
+    emp_path = NULL,
+    inact_path = NULL,
+    fetched_at = NULL,
+    failed_any = FALSE
+  )
+
+  # resolves a user-uploaded override path, else the auto-fetched tempfile
+  .oecd_path <- function(metric) {
+    uploaded <- switch(metric,
+                       unemp = uploaded_files$oecd_unemp,
+                       emp   = uploaded_files$oecd_emp,
+                       inact = uploaded_files$oecd_inact,
+                       NULL)
+    if (!is.null(uploaded)) return(uploaded)
+    switch(metric,
+           unemp = oecd_auto$unemp_path,
+           emp   = oecd_auto$emp_path,
+           inact = oecd_auto$inact_path,
+           NULL)
+  }
+
   # warn if uploaded file doesn't have expected sheets
   .validate_excel <- function(path, expected_sheets, file_label) {
     sheets <- tryCatch(readxl::excel_sheets(path), error = function(e) character(0))
@@ -814,44 +841,51 @@ server <- function(input, output, session) {
     }
   })
   
-  # ons download urls built from reference month
-  .build_ons_urls <- function(mm) {
-    if (is.null(mm) || !nzchar(mm)) mm <- "mar2026"
-    # e.g. "mar2026" -> "march2026"
-    mon3 <- substr(mm, 1, 3)
-    yr   <- substr(mm, 4, nchar(mm))
-    month_map <- c(jan="january",feb="february",mar="march",apr="april",may="may",jun="june",
-                   jul="july",aug="august",sep="september",oct="october",nov="november",dec="december")
-    mon_num_map <- c(jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12)
-    full_month <- paste0(month_map[mon3], yr)
+  # oecd sdmx api endpoints - used for auto-fetch in manual mode
+  OECD_SDMX_URLS <- list(
+    unemp = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.UNE_LF.PT_LF_SUB..Y._T.Y_GE15..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
+    inact = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.OLF_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
+    emp   = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.EMP_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2018-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels"
+  )
 
-    # x02 is quarterly (feb, may, aug, nov) - find most recent quarter
-    mon_num <- mon_num_map[mon3]
-    x02_quarters <- c(2, 5, 8, 11)
-    prev_q <- x02_quarters[x02_quarters <= mon_num]
-    if (length(prev_q) == 0) {
-      x02_mon <- 11; x02_yr <- as.character(as.integer(yr) - 1)
-    } else {
-      x02_mon <- max(prev_q); x02_yr <- yr
+  # auto-fetch oecd sdmx csvs once on session start (deferred until after ui is ready)
+  observe({
+    if (!is.null(oecd_auto$fetched_at)) return()  # already attempted
+    source("utils/manual_word_output.R", local = TRUE)
+    withProgress(message = "Fetching OECD data\u2026", value = 0.05, {
+      incProgress(0.3, detail = "unemployment")
+      oecd_auto$unemp_path <- .fetch_oecd_sdmx_csv(OECD_SDMX_URLS$unemp)
+      incProgress(0.3, detail = "inactivity")
+      oecd_auto$inact_path <- .fetch_oecd_sdmx_csv(OECD_SDMX_URLS$inact)
+      incProgress(0.3, detail = "employment")
+      oecd_auto$emp_path   <- .fetch_oecd_sdmx_csv(OECD_SDMX_URLS$emp)
+    })
+    oecd_auto$fetched_at <- Sys.time()
+    oecd_auto$failed_any <- is.null(oecd_auto$unemp_path) ||
+                            is.null(oecd_auto$emp_path)   ||
+                            is.null(oecd_auto$inact_path)
+  })
+
+  # status banner: green tick with timestamp if ok, amber warning on partial/total failure
+  output$oecd_auto_status <- renderUI({
+    ts <- oecd_auto$fetched_at
+    if (is.null(ts)) {
+      return(div(class = "govuk-hint", style = "font-size: 14px;",
+                 "\u23F3 Fetching OECD data from SDMX API\u2026"))
     }
-    x02_mon3 <- names(mon_num_map)[mon_num_map == x02_mon]
-    x02_mm <- paste0(x02_mon3, x02_yr)
-
-    list(
-      A01   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/summaryoflabourmarketstatistics/current/a01", mm, ".xls"),
-      HR1   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/hr1potentialredundancies/", full_month, "/hr1", mm, ".xlsx"),
-      X09   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/x09realaverageweeklyearningsusingconsumerpriceinflationseasonallyadjusted/", full_month, "/x09", mm, ".xlsx"),
-      RTISA = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/realtimeinformationstatisticsreferencetableseasonallyadjusted/current/rtisa", mm, ".xlsx"),
-      CLA01 = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peoplenotinwork/outofworkbenefits/datasets/claimantcountcla01/current/cla01", mm, ".xlsx"),
-      X02   = paste0("https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/labourforcesurveyflowsestimatesx02/current/x02", x02_mm, ".xls"),
-      OECD_UE    = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.UNE_LF.PT_LF_SUB..Y._T.Y_GE15..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
-      OECD_INACT = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.OLF_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
-      OECD_EMP   = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.EMP_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2018-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels"
-    )
-  }
-
-  ons_download_urls <- reactive({
-    .build_ons_urls(reference_manual_month())
+    stamp <- format(ts, "%H:%M:%S")
+    if (isTRUE(oecd_auto$failed_any)) {
+      div(class = "govuk-inset-text", style = "border-left-color: #f47738;",
+          tags$strong("OECD auto-fetch partially failed."),
+          " Upload any missing OECD CSVs manually using the file input below. ",
+          tags$em(paste0("(attempted at ", stamp, ")")))
+    } else {
+      div(class = "govuk-inset-text", style = "border-left-color: #00703c;",
+          tags$strong("\u2713 OECD data fetched automatically"),
+          " from the OECD SDMX API \u2014 no upload needed. ",
+          "The landing page links are provided for reference; upload an OECD CSV only if you need to override the automatic data. ",
+          tags$em(paste0("(fetched at ", stamp, ")")))
+    }
   })
 
   output$upload_status <- renderUI({
@@ -871,19 +905,34 @@ server <- function(input, output, session) {
       RTISA = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/realtimeinformationstatisticsreferencetableseasonallyadjusted",
       CLA01 = "https://www.ons.gov.uk/employmentandlabourmarket/peoplenotinwork/outofworkbenefits/datasets/claimantcountcla01",
       X02   = "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/datasets/labourforcesurveyflowsestimatesx02",
-      OECD_UE    = "https://data-explorer.oecd.org/vis?lc=en&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS@DF_IALFS_UNE_M&df[ag]=OECD.SDD.TPS&df[vs]=1.0",
-      OECD_EMP   = "https://data-explorer.oecd.org/vis?lc=en&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS@DF_IALFS_EMP_WAP_Q&df[ag]=OECD.SDD.TPS&df[vs]=1.0",
-      OECD_INACT = "https://data-explorer.oecd.org/vis?df[ds]=DisseminateFinalDMZ&df[id]=DSD_LFS@DF_IALFS_INDIC&df[ag]=OECD.SDD.TPS"
+      OECD_UE    = "https://data-explorer.oecd.org/vis?fs[0]=Topic%2C1%7CEmployment%23JOB%23%7CUnemployment%20indicators%23JOB_UNEMP%23&fs[1]=Frequency%20of%20observation%2C0%7CQuarterly%23Q%23&fs[2]=Measure%2C0%7CUnemployment%23UNE%23&fs[3]=Measure%2C0%7CUnemployment%20rate%23UNE_LF%23&pg=0&fc=Measure&snb=1&vw=tb&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS%40DF_IALFS_INDIC&df[ag]=OECD.SDD.TPS&df[vs]=1.0&dq=EA20%2BUSA%2BGBR%2BESP%2BJPN%2BITA%2BDEU%2BFRA%2BCAN.UNE_LF.PT_LF_SUB..Y._T.Y_GE15..Q&pd=2024-Q1%2C&to[TIME_PERIOD]=false",
+      OECD_EMP   = "https://data-explorer.oecd.org/vis?fs[0]=Topic%2C1%7CEmployment%23JOB%23%7CUnemployment%20indicators%23JOB_UNEMP%23&fs[1]=Frequency%20of%20observation%2C0%7CQuarterly%23Q%23&fs[2]=Measure%2C0%7CUnemployment%23UNE%23&fs[3]=Measure%2C0%7CUnemployment%20rate%23UNE_LF%23&pg=0&fc=Measure&snb=1&vw=tb&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS%40DF_IALFS_INDIC&df[ag]=OECD.SDD.TPS&df[vs]=1.0&dq=EA20%2BUSA%2BGBR%2BESP%2BJPN%2BITA%2BDEU%2BFRA%2BCAN.EMP_WAP.PT_WAP_SUB..Y._T.Y15T64..Q&pd=2024-Q1%2C&to[TIME_PERIOD]=false",
+      OECD_INACT = "https://data-explorer.oecd.org/vis?fs[0]=Topic%2C1%7CEmployment%23JOB%23%7CUnemployment%20indicators%23JOB_UNEMP%23&fs[1]=Frequency%20of%20observation%2C0%7CQuarterly%23Q%23&fs[2]=Measure%2C0%7CUnemployment%23UNE%23&fs[3]=Measure%2C0%7CUnemployment%20rate%23UNE_LF%23&pg=0&fc=Measure&snb=1&vw=tb&df[ds]=dsDisseminateFinalDMZ&df[id]=DSD_LFS%40DF_IALFS_INDIC&df[ag]=OECD.SDD.TPS&df[vs]=1.0&dq=EA20%2BUSA%2BGBR%2BESP%2BJPN%2BITA%2BDEU%2BFRA%2BCAN.OLF_WAP.PT_WAP_SUB..Y._T.Y15T64..Q&pd=2024-Q1%2C&to[TIME_PERIOD]=false"
     )
     # map display names to url keys
     url_key_map <- c(A01 = "A01", HR1 = "HR1", RTISA = "RTISA", X09 = "X09",
                      CLA01 = "CLA01", X02 = "X02",
                      `OECD UE` = "OECD_UE", `OECD Emp` = "OECD_EMP", `OECD Inact` = "OECD_INACT")
+    # metric key for oecd auto-fetch lookup
+    oecd_metric_map <- c(`OECD UE` = "unemp", `OECD Emp` = "emp", `OECD Inact` = "inact")
     file_tags <- lapply(names(all_files), function(nm) {
       url_key <- url_key_map[[nm]]
+      metric <- oecd_metric_map[nm]
       if (!is.null(all_files[[nm]])) {
+        # manual override uploaded
         span(class = "govuk-tag govuk-tag--green", style = "margin: 2px;",
              paste0(nm, " \u2713"))
+      } else if (!is.na(metric)) {
+        # oecd tag: auto-fetched (blue) or failed fallback (orange), always linked to landing page
+        auto_path <- switch(metric,
+                            unemp = oecd_auto$unemp_path,
+                            emp   = oecd_auto$emp_path,
+                            inact = oecd_auto$inact_path, NULL)
+        tag_cls <- if (!is.null(auto_path)) "govuk-tag govuk-tag--blue" else "govuk-tag govuk-tag--orange"
+        label <- if (!is.null(auto_path)) paste0(nm, " \u2014 Auto") else paste0(nm, " \u2014 Fetch failed")
+        tags$a(href = landing[[url_key]], target = "_blank",
+               style = "text-decoration: none;",
+               span(class = tag_cls, style = "margin: 2px; cursor: pointer;", label))
       } else if (!is.null(url_key) && url_key %in% names(landing)) {
         tags$a(href = landing[[url_key]], target = "_blank",
                style = "text-decoration: none;",
@@ -900,22 +949,6 @@ server <- function(input, output, session) {
     div(tagList(file_tags), month_line)
   })
   
-  # opens all ons download links in new tabs
-  output$download_all_btn <- renderUI({
-    urls <- ons_download_urls()
-    ons_keys <- c("A01", "HR1", "X09", "RTISA", "CLA01", "X02", "OECD_UE", "OECD_INACT", "OECD_EMP")
-    js_opens <- paste(vapply(ons_keys, function(k) {
-      if (k %in% names(urls)) paste0("window.open('", urls[[k]], "','_blank');") else ""
-    }, character(1)), collapse = " ")
-    div(
-      tags$button(class = "govuk-button govuk-button--secondary",
-                  onclick = js_opens,
-                  "Download All Files"),
-      div(class = "govuk-hint", style = "font-size: 14px;",
-          "If any files fail to download please click on their button below.")
-    )
-  })
-
   # detect vacancies periods from a01
   observeEvent(uploaded_files$a01, {
     path <- uploaded_files$a01
@@ -1670,9 +1703,9 @@ server <- function(input, output, session) {
             file_rtisa = uploaded_files$rtisa,
             file_cla01 = uploaded_files$cla01,
             file_x02 = uploaded_files$x02,
-            file_oecd_unemp = uploaded_files$oecd_unemp,
-            file_oecd_emp = uploaded_files$oecd_emp,
-            file_oecd_inact = uploaded_files$oecd_inact,
+            file_oecd_unemp = .oecd_path("unemp"),
+            file_oecd_emp = .oecd_path("emp"),
+            file_oecd_inact = .oecd_path("inact"),
             calculations_path = calculations_path,
             config_path = config_path,
             vacancies_mode = vac_mode,
@@ -2007,11 +2040,12 @@ server <- function(input, output, session) {
   }
   
   observeEvent(input$manual_preview_oecd, {
-    has_any <- !is.null(uploaded_files$oecd_unemp) ||
-               !is.null(uploaded_files$oecd_emp)   ||
-               !is.null(uploaded_files$oecd_inact)
+    unemp_p <- .oecd_path("unemp")
+    emp_p   <- .oecd_path("emp")
+    inact_p <- .oecd_path("inact")
+    has_any <- !is.null(unemp_p) || !is.null(emp_p) || !is.null(inact_p)
     if (!has_any) {
-      showNotification("Upload at least one OECD file first", type = "warning")
+      showNotification("OECD data not available. Auto-fetch failed \u2014 upload the 3 OECD CSVs manually to override.", type = "warning")
       return()
     }
 
@@ -2019,17 +2053,17 @@ server <- function(input, output, session) {
       source("utils/manual_word_output.R", local = TRUE)
 
       incProgress(0.3, detail = "loading...")
-      unemp_data <- if (!is.null(uploaded_files$oecd_unemp))
-        tryCatch(.read_oecd_latest(uploaded_files$oecd_unemp), error = function(e) NULL)
+      unemp_data <- if (!is.null(unemp_p))
+        tryCatch(.read_oecd_latest(unemp_p), error = function(e) NULL)
       else NULL
 
-      emp_data <- if (!is.null(uploaded_files$oecd_emp))
-        tryCatch(.read_oecd_latest(uploaded_files$oecd_emp), error = function(e) NULL)
+      emp_data <- if (!is.null(emp_p))
+        tryCatch(.read_oecd_latest(emp_p), error = function(e) NULL)
       else NULL
 
       incProgress(0.5, detail = "generating...")
-      inact_data <- if (!is.null(uploaded_files$oecd_inact))
-        tryCatch(.read_oecd_latest(uploaded_files$oecd_inact), error = function(e) NULL)
+      inact_data <- if (!is.null(inact_p))
+        tryCatch(.read_oecd_latest(inact_p), error = function(e) NULL)
       else NULL
 
       preview <- .build_oecd_preview(unemp_data, emp_data, inact_data)
@@ -2098,9 +2132,9 @@ server <- function(input, output, session) {
               manual_month = manual_month,
               file_a01 = uploaded_files$a01, file_hr1 = uploaded_files$hr1,
               file_x09 = uploaded_files$x09, file_rtisa = uploaded_files$rtisa,
-              file_oecd_unemp = uploaded_files$oecd_unemp,
-              file_oecd_emp   = uploaded_files$oecd_emp,
-              file_oecd_inact = uploaded_files$oecd_inact,
+              file_oecd_unemp = .oecd_path("unemp"),
+              file_oecd_emp   = .oecd_path("emp"),
+              file_oecd_inact = .oecd_path("inact"),
               vac_end_override = .parse_period_end(.selected_vac_label()),
               payroll_end_override = .parse_period_end(.selected_pay_label()),
               summary_override = summary_lines,
@@ -2181,9 +2215,9 @@ server <- function(input, output, session) {
             file_rtisa = uploaded_files$rtisa,
             file_cla01 = uploaded_files$cla01,
             file_x02 = uploaded_files$x02,
-            file_oecd_unemp = uploaded_files$oecd_unemp,
-            file_oecd_emp = uploaded_files$oecd_emp,
-            file_oecd_inact = uploaded_files$oecd_inact,
+            file_oecd_unemp = .oecd_path("unemp"),
+            file_oecd_emp = .oecd_path("emp"),
+            file_oecd_inact = .oecd_path("inact"),
             calculations_path = calculations_path,
             config_path = config_path,
             vacancies_mode = selected_vac_period(),
