@@ -6,24 +6,6 @@ suppressPackageStartupMessages({
 
 source("utils/word_helpers.R", local = FALSE)
 
-# download an oecd sdmx csv to a cached tempfile (used by manual-mode auto-fetch)
-# returns tempfile path on success, NULL on failure
-.fetch_oecd_sdmx_csv <- function(url, timeout_secs = 30) {
-  if (is.null(url) || !nzchar(url)) return(NULL)
-  old_to <- getOption("timeout")
-  options(timeout = timeout_secs)
-  on.exit(options(timeout = old_to), add = TRUE)
-  tryCatch({
-    tmp <- tempfile(fileext = ".csv")
-    utils::download.file(url, tmp, quiet = TRUE, mode = "wb")
-    if (!file.exists(tmp) || file.info(tmp)$size == 0) return(NULL)
-    tmp
-  }, error = function(e) {
-    warning("OECD SDMX fetch failed (", url, "): ", e$message)
-    NULL
-  })
-}
-
 .read_oecd_latest <- function(path) {
   if (is.null(path) || !file.exists(path)) return(NULL)
   
@@ -241,9 +223,16 @@ generate_manual_word_output <- function(
   doc <- fill_conditional(doc, "qvzwnode",  .format_gbp_signed0(sv("wages_change_election")),     sv("wages_change_election"))
   doc <- fill_conditional(doc, "qvzwcpde",  .format_gbp_signed0(sv("wages_cpi_change_election")), sv("wages_cpi_change_election"))
   
-  oecd_unemp_data <- tryCatch(.read_oecd_latest(file_oecd_unemp), error = function(e) NULL)
-  oecd_emp_data   <- tryCatch(.read_oecd_latest(file_oecd_emp),   error = function(e) NULL)
-  oecd_inact_data <- tryCatch(.read_oecd_latest(file_oecd_inact), error = function(e) NULL)
+  # file_oecd_* may be a file path (uploaded) or a pre-fetched data.frame
+  # (auto-fetched from db). Data frames pass through unchanged.
+  .coerce <- function(x) {
+    if (is.null(x)) return(NULL)
+    if (is.data.frame(x)) return(x)
+    .read_oecd_latest(x)
+  }
+  oecd_unemp_data <- tryCatch(.coerce(file_oecd_unemp), error = function(e) NULL)
+  oecd_emp_data   <- tryCatch(.coerce(file_oecd_emp),   error = function(e) NULL)
+  oecd_inact_data <- tryCatch(.coerce(file_oecd_inact), error = function(e) NULL)
   
   if (!is.null(oecd_unemp_data) || !is.null(oecd_emp_data) || !is.null(oecd_inact_data)) {
     doc <- .fill_oecd_placeholders(doc, oecd_unemp_data, oecd_emp_data, oecd_inact_data)

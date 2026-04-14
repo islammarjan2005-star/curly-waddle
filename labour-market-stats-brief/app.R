@@ -655,18 +655,20 @@ server <- function(input, output, session) {
     oecd_inact = NULL
   )
 
-  # oecd data auto-fetched from sdmx api (manual mode) - cached tempfile paths
-  # uploaded files take precedence; see .oecd_path() resolver below
+  # oecd data auto-fetched from the oecd.* postgres tables (same source
+  # auto mode uses - see .fetch_oecd_table in the auto preview block).
+  # uploaded files still take precedence; see .oecd_source() resolver.
   oecd_auto <- reactiveValues(
-    unemp_path = NULL,
-    emp_path = NULL,
-    inact_path = NULL,
+    unemp_df = NULL,
+    emp_df = NULL,
+    inact_df = NULL,
     fetched_at = NULL,
     failed_any = FALSE
   )
 
-  # resolves a user-uploaded override path, else the auto-fetched tempfile
-  .oecd_path <- function(metric) {
+  # resolves a user-uploaded override path, else a pre-fetched data.frame
+  # (country/period/value). Downstream handlers accept either format.
+  .oecd_source <- function(metric) {
     uploaded <- switch(metric,
                        unemp = uploaded_files$oecd_unemp,
                        emp   = uploaded_files$oecd_emp,
@@ -674,9 +676,9 @@ server <- function(input, output, session) {
                        NULL)
     if (!is.null(uploaded)) return(uploaded)
     switch(metric,
-           unemp = oecd_auto$unemp_path,
-           emp   = oecd_auto$emp_path,
-           inact = oecd_auto$inact_path,
+           unemp = oecd_auto$unemp_df,
+           emp   = oecd_auto$emp_df,
+           inact = oecd_auto$inact_df,
            NULL)
   }
 
@@ -841,29 +843,26 @@ server <- function(input, output, session) {
     }
   })
   
-  # oecd sdmx api endpoints - used for auto-fetch in manual mode
-  OECD_SDMX_URLS <- list(
-    unemp = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.UNE_LF.PT_LF_SUB..Y._T.Y_GE15..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
-    inact = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.OLF_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2024-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels",
-    emp   = "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_INDIC,1.0/EA20+USA+GBR+ESP+JPN+ITA+DEU+FRA+CAN.EMP_WAP.PT_WAP_SUB..Y._T.Y15T64..Q?startPeriod=2018-Q1&dimensionAtObservation=AllDimensions&format=csvfilewithlabels"
-  )
-
-  # auto-fetch oecd sdmx csvs once on session start (deferred until after ui is ready)
+  # auto-fetch oecd from the postgres oecd.* tables once on session start.
+  # This is the same data source the Automatic tab uses, so as long as the
+  # DB is reachable the fetch cannot fail (no external HTTP dependency).
   observe({
     if (!is.null(oecd_auto$fetched_at)) return()  # already attempted
-    source("utils/manual_word_output.R", local = TRUE)
-    withProgress(message = "Fetching OECD data\u2026", value = 0.05, {
-      incProgress(0.3, detail = "unemployment")
-      oecd_auto$unemp_path <- .fetch_oecd_sdmx_csv(OECD_SDMX_URLS$unemp)
-      incProgress(0.3, detail = "inactivity")
-      oecd_auto$inact_path <- .fetch_oecd_sdmx_csv(OECD_SDMX_URLS$inact)
-      incProgress(0.3, detail = "employment")
-      oecd_auto$emp_path   <- .fetch_oecd_sdmx_csv(OECD_SDMX_URLS$emp)
+    if (!exists("fetch_oecd_from_db", inherits = TRUE)) {
+      source("utils/helpers.R", local = FALSE)
+    }
+    withProgress(message = "Fetching OECD data from database\u2026", value = 0.1, {
+      res <- tryCatch(fetch_oecd_from_db(verbose = TRUE),
+                      error = function(e) list(unemp = NULL, emp = NULL, inact = NULL))
+      incProgress(0.9, detail = "done")
+      oecd_auto$unemp_df <- res$unemp
+      oecd_auto$emp_df   <- res$emp
+      oecd_auto$inact_df <- res$inact
     })
     oecd_auto$fetched_at <- Sys.time()
-    oecd_auto$failed_any <- is.null(oecd_auto$unemp_path) ||
-                            is.null(oecd_auto$emp_path)   ||
-                            is.null(oecd_auto$inact_path)
+    oecd_auto$failed_any <- is.null(oecd_auto$unemp_df) ||
+                            is.null(oecd_auto$emp_df)   ||
+                            is.null(oecd_auto$inact_df)
   })
 
   # status banner: green tick with timestamp if ok, amber warning on partial/total failure
@@ -871,19 +870,19 @@ server <- function(input, output, session) {
     ts <- oecd_auto$fetched_at
     if (is.null(ts)) {
       return(div(class = "govuk-hint", style = "font-size: 14px;",
-                 "\u23F3 Fetching OECD data from SDMX API\u2026"))
+                 "\u23F3 Fetching OECD data from the internal database\u2026"))
     }
     stamp <- format(ts, "%H:%M:%S")
     if (isTRUE(oecd_auto$failed_any)) {
       div(class = "govuk-inset-text", style = "border-left-color: #f47738;",
           tags$strong("OECD auto-fetch partially failed."),
-          " Upload any missing OECD CSVs manually using the file input below. ",
+          " The OECD database tables are not reachable \u2014 upload any missing OECD CSVs manually using the file input below. ",
           tags$em(paste0("(attempted at ", stamp, ")")))
     } else {
       div(class = "govuk-inset-text", style = "border-left-color: #00703c;",
           tags$strong("\u2713 OECD data fetched automatically"),
-          " from the OECD SDMX API \u2014 no upload needed. ",
-          "The landing page links are provided for reference; upload an OECD CSV only if you need to override the automatic data. ",
+          " from the internal database \u2014 no upload needed. ",
+          "The OECD landing page links are provided for reference; upload an OECD CSV only if you need to override the database values. ",
           tags$em(paste0("(fetched at ", stamp, ")")))
     }
   })
@@ -924,12 +923,12 @@ server <- function(input, output, session) {
              paste0(nm, " \u2713"))
       } else if (!is.na(metric)) {
         # oecd tag: auto-fetched (blue) or failed fallback (orange), always linked to landing page
-        auto_path <- switch(metric,
-                            unemp = oecd_auto$unemp_path,
-                            emp   = oecd_auto$emp_path,
-                            inact = oecd_auto$inact_path, NULL)
-        tag_cls <- if (!is.null(auto_path)) "govuk-tag govuk-tag--blue" else "govuk-tag govuk-tag--orange"
-        label <- if (!is.null(auto_path)) paste0(nm, " \u2014 Auto") else paste0(nm, " \u2014 Fetch failed")
+        auto_df <- switch(metric,
+                          unemp = oecd_auto$unemp_df,
+                          emp   = oecd_auto$emp_df,
+                          inact = oecd_auto$inact_df, NULL)
+        tag_cls <- if (!is.null(auto_df)) "govuk-tag govuk-tag--blue" else "govuk-tag govuk-tag--orange"
+        label <- if (!is.null(auto_df)) paste0(nm, " \u2014 Auto") else paste0(nm, " \u2014 Fetch failed")
         tags$a(href = landing[[url_key]], target = "_blank",
                style = "text-decoration: none;",
                span(class = tag_cls, style = "margin: 2px; cursor: pointer;", label))
@@ -1703,9 +1702,9 @@ server <- function(input, output, session) {
             file_rtisa = uploaded_files$rtisa,
             file_cla01 = uploaded_files$cla01,
             file_x02 = uploaded_files$x02,
-            file_oecd_unemp = .oecd_path("unemp"),
-            file_oecd_emp = .oecd_path("emp"),
-            file_oecd_inact = .oecd_path("inact"),
+            file_oecd_unemp = .oecd_source("unemp"),
+            file_oecd_emp = .oecd_source("emp"),
+            file_oecd_inact = .oecd_source("inact"),
             calculations_path = calculations_path,
             config_path = config_path,
             vacancies_mode = vac_mode,
@@ -2040,31 +2039,29 @@ server <- function(input, output, session) {
   }
   
   observeEvent(input$manual_preview_oecd, {
-    unemp_p <- .oecd_path("unemp")
-    emp_p   <- .oecd_path("emp")
-    inact_p <- .oecd_path("inact")
-    has_any <- !is.null(unemp_p) || !is.null(emp_p) || !is.null(inact_p)
+    unemp_src <- .oecd_source("unemp")
+    emp_src   <- .oecd_source("emp")
+    inact_src <- .oecd_source("inact")
+    has_any <- !is.null(unemp_src) || !is.null(emp_src) || !is.null(inact_src)
     if (!has_any) {
       showNotification("OECD data not available. Auto-fetch failed \u2014 upload the 3 OECD CSVs manually to override.", type = "warning")
       return()
     }
 
+    # src may be a file path (uploaded) or a pre-fetched data.frame (auto db)
+    .coerce_oecd <- function(x) {
+      if (is.null(x)) return(NULL)
+      if (is.data.frame(x)) return(x)
+      tryCatch(.read_oecd_latest(x), error = function(e) NULL)
+    }
+
     withProgress(message = "loading oecd data...", value = 0, {
       source("utils/manual_word_output.R", local = TRUE)
-
       incProgress(0.3, detail = "loading...")
-      unemp_data <- if (!is.null(unemp_p))
-        tryCatch(.read_oecd_latest(unemp_p), error = function(e) NULL)
-      else NULL
-
-      emp_data <- if (!is.null(emp_p))
-        tryCatch(.read_oecd_latest(emp_p), error = function(e) NULL)
-      else NULL
-
+      unemp_data <- .coerce_oecd(unemp_src)
+      emp_data   <- .coerce_oecd(emp_src)
       incProgress(0.5, detail = "generating...")
-      inact_data <- if (!is.null(inact_p))
-        tryCatch(.read_oecd_latest(inact_p), error = function(e) NULL)
-      else NULL
+      inact_data <- .coerce_oecd(inact_src)
 
       preview <- .build_oecd_preview(unemp_data, emp_data, inact_data)
       oecd_preview_data(preview)
@@ -2132,9 +2129,9 @@ server <- function(input, output, session) {
               manual_month = manual_month,
               file_a01 = uploaded_files$a01, file_hr1 = uploaded_files$hr1,
               file_x09 = uploaded_files$x09, file_rtisa = uploaded_files$rtisa,
-              file_oecd_unemp = .oecd_path("unemp"),
-              file_oecd_emp   = .oecd_path("emp"),
-              file_oecd_inact = .oecd_path("inact"),
+              file_oecd_unemp = .oecd_source("unemp"),
+              file_oecd_emp   = .oecd_source("emp"),
+              file_oecd_inact = .oecd_source("inact"),
               vac_end_override = .parse_period_end(.selected_vac_label()),
               payroll_end_override = .parse_period_end(.selected_pay_label()),
               summary_override = summary_lines,
@@ -2215,9 +2212,9 @@ server <- function(input, output, session) {
             file_rtisa = uploaded_files$rtisa,
             file_cla01 = uploaded_files$cla01,
             file_x02 = uploaded_files$x02,
-            file_oecd_unemp = .oecd_path("unemp"),
-            file_oecd_emp = .oecd_path("emp"),
-            file_oecd_inact = .oecd_path("inact"),
+            file_oecd_unemp = .oecd_source("unemp"),
+            file_oecd_emp = .oecd_source("emp"),
+            file_oecd_inact = .oecd_source("inact"),
             calculations_path = calculations_path,
             config_path = config_path,
             vacancies_mode = selected_vac_period(),

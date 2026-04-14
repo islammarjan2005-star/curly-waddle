@@ -248,3 +248,55 @@ fmt_pct_unsigned <- function(x) {
     paste0(format(v1, nsmall = 1), "%")
   }
 }
+
+# --- oecd fetch from postgres (shared by auto + manual modes) ---
+#
+# returns list(unemp, emp, inact) where each element is a data.frame with
+# columns country/period/value (latest non-NA observation per country), or
+# NULL on failure. The same format is produced by .parse_oecd_sdmx() and
+# .read_oecd_latest(), so downstream code treats all three sources identically.
+fetch_oecd_from_db <- function(verbose = FALSE) {
+  result <- list(unemp = NULL, emp = NULL, inact = NULL)
+  if (!requireNamespace("DBI", quietly = TRUE) ||
+      !requireNamespace("RPostgres", quietly = TRUE)) {
+    if (verbose) message("[oecd_db] DBI/RPostgres not available")
+    return(result)
+  }
+
+  country_map <- c(GBR = "United Kingdom", USA = "United States", FRA = "France",
+                   DEU = "Germany", ITA = "Italy", ESP = "Spain",
+                   CAN = "Canada", JPN = "Japan", EA20 = "Euro area")
+
+  .query <- function(conn, table_name) {
+    tryCatch({
+      q <- sprintf(
+        'SELECT ref_area, time_period, obs_value FROM "oecd"."%s" WHERE ref_area IN (\'GBR\',\'USA\',\'FRA\',\'DEU\',\'ITA\',\'ESP\',\'CAN\',\'JPN\',\'EA20\') ORDER BY ref_area, time_period DESC',
+        table_name
+      )
+      raw <- DBI::dbGetQuery(conn, q)
+      if (nrow(raw) == 0) return(NULL)
+      raw <- raw[!is.na(raw$obs_value) & nzchar(raw$obs_value), , drop = FALSE]
+      raw <- raw[!duplicated(raw$ref_area), , drop = FALSE]
+      raw$country <- country_map[raw$ref_area]
+      raw$value   <- suppressWarnings(as.numeric(raw$obs_value))
+      raw$period  <- raw$time_period
+      raw[!is.na(raw$country), c("country", "period", "value"), drop = FALSE]
+    }, error = function(e) {
+      if (verbose) message("[oecd_db] query '", table_name, "' failed: ", e$message)
+      NULL
+    })
+  }
+
+  conn <- NULL
+  tryCatch({
+    conn <- DBI::dbConnect(RPostgres::Postgres())
+    result$unemp <- .query(conn, "labour_statistics__unemployment_rate")
+    result$emp   <- .query(conn, "labour_statistics__employment_rate")
+    result$inact <- .query(conn, "labour_statistics__inactivity_rate")
+  }, error = function(e) {
+    if (verbose) message("[oecd_db] connection failed: ", e$message)
+  }, finally = {
+    if (!is.null(conn)) try(DBI::dbDisconnect(conn), silent = TRUE)
+  })
+  result
+}

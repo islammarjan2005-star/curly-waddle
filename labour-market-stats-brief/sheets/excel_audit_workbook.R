@@ -337,6 +337,12 @@ create_audit_workbook <- function(
     list(file = file_oecd_inact, name = "Inactivity")
   )) {
     if (!is.null(oecd_info$file)) {
+      # auto-fetched data arrives as a pre-parsed data.frame (country/period/value)
+      if (is.data.frame(oecd_info$file)) {
+        addWorksheet(wb, oecd_info$name, tabColour = "#2F5496")
+        writeData(wb, oecd_info$name, oecd_info$file, headerStyle = .hs())
+        next
+      }
       ext <- tolower(tools::file_ext(oecd_info$file))
       if (ext == "csv") {
         # oecd csvs come in sdmx long format, need to pivot to wide
