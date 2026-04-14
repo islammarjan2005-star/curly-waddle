@@ -494,8 +494,8 @@ ui <- fluidPage(
 
                                              tags$hr(class = "govuk-section-break"),
 
-                                             div(class = "govuk-hint", style = "font-size: 14px;",
-                                                 "Download each ONS file individually by clicking its grey tag below. OECD data is fetched automatically \u2014 no upload needed."),
+                                             div(class = "govuk-hint", style = "font-size: 17px; line-height: 1.4;",
+                                                 "Click a grey tag below to open its ONS download page. OECD data is fetched automatically."),
                                              uiOutput("oecd_auto_status"),
                                              uiOutput("upload_status"),
 
@@ -869,21 +869,18 @@ server <- function(input, output, session) {
   output$oecd_auto_status <- renderUI({
     ts <- oecd_auto$fetched_at
     if (is.null(ts)) {
-      return(div(class = "govuk-hint", style = "font-size: 14px;",
-                 "\u23F3 Fetching OECD data from the internal database\u2026"))
+      return(div(class = "govuk-hint", style = "font-size: 16px;",
+                 "\u23F3 Fetching OECD data\u2026"))
     }
-    stamp <- format(ts, "%H:%M:%S")
+    stamp <- format(ts, "%H:%M")
     if (isTRUE(oecd_auto$failed_any)) {
-      div(class = "govuk-inset-text", style = "border-left-color: #f47738;",
-          tags$strong("OECD auto-fetch partially failed."),
-          " The OECD database tables are not reachable \u2014 upload any missing OECD CSVs manually using the file input below. ",
-          tags$em(paste0("(attempted at ", stamp, ")")))
+      div(class = "govuk-inset-text", style = "border-left-color: #f47738; padding: 8px 12px; margin: 6px 0;",
+          tags$strong("OECD auto-fetch failed."),
+          " Upload the 3 OECD CSVs manually to override.")
     } else {
-      div(class = "govuk-inset-text", style = "border-left-color: #00703c;",
-          tags$strong("\u2713 OECD data fetched automatically"),
-          " from the internal database \u2014 no upload needed. ",
-          "The OECD landing page links are provided for reference; upload an OECD CSV only if you need to override the database values. ",
-          tags$em(paste0("(fetched at ", stamp, ")")))
+      div(class = "govuk-inset-text", style = "border-left-color: #00703c; padding: 8px 12px; margin: 6px 0;",
+          tags$strong("\u2713 OECD data auto-fetched"),
+          paste0(" at ", stamp, " \u2014 upload a CSV only to override."))
     }
   })
 
