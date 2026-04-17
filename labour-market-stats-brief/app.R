@@ -200,13 +200,21 @@ ui <- fluidPage(
         font-weight: 700;
         font-size: 16px;
         display: inline-block;
-        padding: 5px 8px 4px;
+        padding: 6px 10px 5px;
         color: #ffffff;
         background-color: #1d70b8;
         letter-spacing: 1px;
         text-transform: uppercase;
         margin-right: 10px;
       }
+
+      .file-tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        margin: 12px 0 4px;
+      }
+      .file-tag-row .govuk-tag { margin: 0; }
 
       .govuk-tag--green {
         background-color: #00703c;
@@ -226,13 +234,17 @@ ui <- fluidPage(
         font-size: 19px;
       }
 
-      .dashboard-card__content { padding: 20px; }
+      .dashboard-card__content { padding: 24px 28px; }
 
       .govuk-section-break {
-        margin: 30px 0;
+        margin: 36px 0;
         border: 0;
         border-bottom: 1px solid #b1b4b6;
       }
+
+      .period-block { margin-bottom: 24px; }
+      .period-block > .govuk-label { margin-bottom: 10px; }
+      .period-block:last-child { margin-bottom: 0; }
 
       .govuk-grid-row {
         display: flex;
@@ -509,17 +521,17 @@ ui <- fluidPage(
                                              tags$hr(class = "govuk-section-break"),
                                              
                                              h2(class = "govuk-heading-m", "Period selection"),
-                                             div(
+                                             div(class = "period-block",
                                                tags$label(class = "govuk-label", style = "font-weight:700;", "Vacancies"),
                                                uiOutput("manual_vac_period_buttons")
                                              ),
-                                             div(
+                                             div(class = "period-block",
                                                tags$label(class = "govuk-label", style = "font-weight:700;", "Payroll employees"),
                                                uiOutput("manual_pay_period_buttons")
                                              ),
-                                             
+
                                              tags$hr(class = "govuk-section-break"),
-                                             
+
                                              h2(class = "govuk-heading-m", "Preview"),
                                              actionButton("manual_preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
                                              actionButton("manual_preview_topten", "Top Ten", class = "govuk-button govuk-button--blue"),
@@ -557,11 +569,11 @@ ui <- fluidPage(
                                              tags$hr(class = "govuk-section-break"),
 
                                              h2(class = "govuk-heading-m", "Period selection"),
-                                             div(
+                                             div(class = "period-block",
                                                tags$label(class = "govuk-label", style = "font-weight:700;", "Vacancies"),
                                                uiOutput("auto_vac_period_buttons")
                                              ),
-                                             div(
+                                             div(class = "period-block",
                                                tags$label(class = "govuk-label", style = "font-weight:700;", "Payroll employees"),
                                                uiOutput("auto_pay_period_buttons")
                                              ),
@@ -874,11 +886,11 @@ server <- function(input, output, session) {
     }
     stamp <- format(ts, "%H:%M")
     if (isTRUE(oecd_auto$failed_any)) {
-      div(class = "govuk-inset-text", style = "border-left-color: #f47738; padding: 8px 12px; margin: 6px 0;",
+      div(class = "govuk-inset-text", style = "border-left-color: #f47738; padding: 10px 14px; margin: 14px 0;",
           tags$strong("OECD auto-fetch failed."),
           " Upload the 3 OECD CSVs manually to override.")
     } else {
-      div(class = "govuk-inset-text", style = "border-left-color: #00703c; padding: 8px 12px; margin: 6px 0;",
+      div(class = "govuk-inset-text", style = "border-left-color: #00703c; padding: 10px 14px; margin: 14px 0;",
           tags$strong("\u2713 OECD data auto-fetched"),
           paste0(" at ", stamp, " \u2014 upload a CSV only to override."))
     }
@@ -916,7 +928,7 @@ server <- function(input, output, session) {
       metric <- oecd_metric_map[nm]
       if (!is.null(all_files[[nm]])) {
         # manual override uploaded
-        span(class = "govuk-tag govuk-tag--green", style = "margin: 2px;",
+        span(class = "govuk-tag govuk-tag--green",
              paste0(nm, " \u2713"))
       } else if (!is.na(metric)) {
         # oecd tag: auto-fetched (blue) or failed fallback (orange), always linked to landing page
@@ -928,21 +940,21 @@ server <- function(input, output, session) {
         label <- if (!is.null(auto_df)) paste0(nm, " \u2014 Auto") else paste0(nm, " \u2014 Fetch failed")
         tags$a(href = landing[[url_key]], target = "_blank",
                style = "text-decoration: none;",
-               span(class = tag_cls, style = "margin: 2px; cursor: pointer;", label))
+               span(class = tag_cls, style = "cursor: pointer;", label))
       } else if (!is.null(url_key) && url_key %in% names(landing)) {
         tags$a(href = landing[[url_key]], target = "_blank",
                style = "text-decoration: none;",
-               span(class = "govuk-tag govuk-tag--grey", style = "margin: 2px; cursor: pointer;", nm))
+               span(class = "govuk-tag govuk-tag--grey", style = "cursor: pointer;", nm))
       } else {
-        span(class = "govuk-tag govuk-tag--grey", style = "margin: 2px;", nm)
+        span(class = "govuk-tag govuk-tag--grey", nm)
       }
     })
     mm <- reference_manual_month()
     month_line <- if (!is.null(mm) && nzchar(mm) && !is.null(uploaded_files$a01)) {
-      div(style = "margin-top: 6px; font-weight: 600;",
+      div(style = "margin-top: 10px; font-weight: 600;",
           paste0("Reference month: ", manual_month_to_display(mm)))
     }
-    div(tagList(file_tags), month_line)
+    div(div(class = "file-tag-row", tagList(file_tags)), month_line)
   })
   
   # detect vacancies periods from a01
