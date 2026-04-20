@@ -456,6 +456,18 @@ ui <- fluidPage(
       .period-toggle-group .govuk-button:last-child { border-right: none; }
       .period-toggle-group .govuk-button.active { background-color: #1d70b8; color: #ffffff; }
       .period-toggle-group .govuk-button:not(.active) { background-color: #f3f2f1; color: #0b0c0c; box-shadow: none; }
+    ")),
+    tags$script(HTML("
+      $(document).on('click', '#preview_dashboard', function() {
+        $('#dashboard_preview').html(
+          '<div style=\"padding: 12px;\">' +
+          '<div class=\"loader\"></div>' +
+          '<strong>Loading dashboard\u2026</strong>' +
+          '<div style=\"margin-top: 8px; color: #505a5f;\">' +
+          'Fetching data from the database. This can take a few seconds on gov cloud.' +
+          '</div></div>'
+        );
+      });
     "))
   ),
   
