@@ -12,7 +12,7 @@ LFS_CODES <- list(
 )
 
 fetch_lfs <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, dataset_identifier_code, value
 FROM "ons"."labour_market__age_group"')

@@ -52,19 +52,43 @@ source("sheets/payroll_by_age.R")
 vac_mode     <- if (exists("vacancies_mode", inherits = TRUE)) get("vacancies_mode", inherits = TRUE) else "latest"
 payroll_mode <- if (exists("payroll_mode",   inherits = TRUE)) get("payroll_mode",   inherits = TRUE) else "latest"
 
-lfs             <- tryCatch(calculate_lfs(manual_month),                         error = .err("lfs"))
-vac             <- tryCatch(calculate_vacancies(manual_month, mode = vac_mode),  error = .err("vacancies"))
-payroll         <- tryCatch(calculate_payroll(manual_month, mode = payroll_mode),error = .err("payroll"))
-wages_nom       <- tryCatch(calculate_wages_nominal(manual_month),               error = .err("wages nominal"))
-wages_cpi       <- tryCatch(calculate_wages_cpi(manual_month),                   error = .err("wages cpi"))
-days_lost       <- tryCatch(calculate_days_lost(manual_month),                   error = .err("days lost"))
-redund          <- tryCatch(calculate_redundancy(manual_month),                  error = .err("redundancy"))
-sectors         <- tryCatch(calculate_sector_payroll(manual_month),              error = .err("sector payroll"))
-hr1             <- tryCatch(calculate_hr1(),                                     error = .err("hr1"))
-inact_reasons   <- tryCatch(calculate_inactivity_reasons(manual_month),          error = .err("inactivity reasons"))
-workforce_jobs  <- tryCatch(calculate_workforce_jobs(manual_month),              error = .err("workforce jobs"))
-unemployment_by_age <- tryCatch(calculate_unemployment_by_age(manual_month),    error = .err("unemployment by age"))
-payroll_by_age  <- tryCatch(calculate_payroll_by_age(manual_month),              error = .err("payroll by age"))
+# Optional progress callback: the Shiny preview handler passes a function that
+# calls incProgress(). Falls back to a no-op when sourced outside a Shiny
+# session (e.g. Word export). Keeping this here means per-sheet progress works
+# without duplicating the sheet list in the handler.
+.progress_cb <- if (exists(".progress_cb", inherits = TRUE) &&
+                   is.function(get(".progress_cb", inherits = TRUE))) {
+  get(".progress_cb", inherits = TRUE)
+} else {
+  function(msg) invisible(NULL)
+}
+.step <- function(name, expr) { .progress_cb(name); expr }
+
+# Reuse cached sheet results when the Shiny handler has populated `.sheet_cache`
+# in this environment. Anything not in the cache is fetched as before.
+.cache <- if (exists(".sheet_cache", inherits = TRUE) &&
+              is.list(get(".sheet_cache", inherits = TRUE))) {
+  get(".sheet_cache", inherits = TRUE)
+} else {
+  list()
+}
+.cache_or <- function(key, expr) {
+  if (!is.null(.cache[[key]])) .cache[[key]] else expr
+}
+
+lfs             <- .step("Labour Force Survey",     .cache_or("lfs",             tryCatch(calculate_lfs(manual_month),                         error = .err("lfs"))))
+vac             <- .step("Vacancies",               .cache_or("vac",             tryCatch(calculate_vacancies(manual_month, mode = vac_mode),  error = .err("vacancies"))))
+payroll         <- .step("Payrolled employees",     .cache_or("payroll",         tryCatch(calculate_payroll(manual_month, mode = payroll_mode),error = .err("payroll"))))
+wages_nom       <- .step("Nominal wages",           .cache_or("wages_nom",       tryCatch(calculate_wages_nominal(manual_month),               error = .err("wages nominal"))))
+wages_cpi       <- .step("CPI-adjusted wages",      .cache_or("wages_cpi",       tryCatch(calculate_wages_cpi(manual_month),                   error = .err("wages cpi"))))
+days_lost       <- .step("Working days lost",       .cache_or("days_lost",       tryCatch(calculate_days_lost(manual_month),                   error = .err("days lost"))))
+redund          <- .step("Redundancies",            .cache_or("redund",          tryCatch(calculate_redundancy(manual_month),                  error = .err("redundancy"))))
+sectors         <- .step("Sector payroll",          .cache_or("sectors",         tryCatch(calculate_sector_payroll(manual_month),              error = .err("sector payroll"))))
+hr1             <- .step("HR1 notifications",       .cache_or("hr1",             tryCatch(calculate_hr1(),                                     error = .err("hr1"))))
+inact_reasons   <- .step("Inactivity reasons",      .cache_or("inact_reasons",   tryCatch(calculate_inactivity_reasons(manual_month),          error = .err("inactivity reasons"))))
+workforce_jobs  <- .step("Workforce jobs",          .cache_or("workforce_jobs",  tryCatch(calculate_workforce_jobs(manual_month),              error = .err("workforce jobs"))))
+unemployment_by_age <- .step("Unemployment by age", .cache_or("unemployment_by_age", tryCatch(calculate_unemployment_by_age(manual_month),      error = .err("unemployment by age"))))
+payroll_by_age  <- .step("Payroll by age",          .cache_or("payroll_by_age",  tryCatch(calculate_payroll_by_age(manual_month),              error = .err("payroll by age"))))
 
 cm       <- parse_manual_month(manual_month)
 anchor_m <- cm %m-% months(2)

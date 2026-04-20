@@ -2,6 +2,10 @@
 
 library(shiny)
 
+# pg_connect() is defined here; sourced at package load so the startup DB
+# queries in session$onFlushed can use it before any sheet has been loaded.
+source("utils/helpers.R")
+
 # ui - gov.uk design system
 
 ui <- fluidPage(
@@ -596,17 +600,13 @@ ui <- fluidPage(
 
                                              # --- Preview buttons ---
                                              h2(class = "govuk-heading-m", "Preview"),
-                                             actionButton("preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
-                                             actionButton("preview_topten", "Top Ten", class = "govuk-button govuk-button--blue"),
-                                             actionButton("auto_preview_summary", "Summary", class = "govuk-button govuk-button--blue"),
-                                             actionButton("auto_preview_oecd", "OECD", class = "govuk-button govuk-button--blue"),
+                                             uiOutput("auto_preview_buttons"),
 
                                              tags$hr(class = "govuk-section-break"),
 
                                              # --- Download buttons ---
                                              h2(class = "govuk-heading-m", "Download"),
-                                             downloadButton("download_word", "Download Word", class = "govuk-button govuk-button--blue"),
-                                             downloadButton("download_excel", "Download Excel", class = "govuk-button")
+                                             uiOutput("auto_download_buttons")
                                          )
                                      )
                             )
@@ -1015,6 +1015,14 @@ server <- function(input, output, session) {
   })
   
   reference_manual_month <- reactiveVal(NULL)
+  # true once the Automatic-tab startup DB probes (month + period labels) have
+  # finished (successfully or otherwise). Gates the Preview buttons so users
+  # can't click them before the reference month is known.
+  auto_tab_ready <- reactiveVal(FALSE)
+  auto_tab_error <- reactiveVal(NULL)
+  # session-scoped cache of DB-backed calculations, keyed by ref month + period
+  # selections. Repeat Preview clicks hit this instead of re-running queries.
+  sheet_cache <- reactiveVal(list())
   manual_period_labels <- reactiveValues(
     vac_aligned = NULL, vac_latest = NULL,
     pay_aligned = NULL, pay_latest = NULL
@@ -1094,10 +1102,56 @@ server <- function(input, output, session) {
     )
   })
 
-  observeEvent(input$auto_vac_period_aligned, { auto_selected_vac_period("aligned") })
-  observeEvent(input$auto_vac_period_latest,  { auto_selected_vac_period("latest") })
-  observeEvent(input$auto_pay_period_aligned, { auto_selected_pay_period("aligned") })
-  observeEvent(input$auto_pay_period_latest,  { auto_selected_pay_period("latest") })
+  observeEvent(input$auto_vac_period_aligned, { auto_selected_vac_period("aligned"); sheet_cache(list()) })
+  observeEvent(input$auto_vac_period_latest,  { auto_selected_vac_period("latest");  sheet_cache(list()) })
+  observeEvent(input$auto_pay_period_aligned, { auto_selected_pay_period("aligned"); sheet_cache(list()) })
+  observeEvent(input$auto_pay_period_latest,  { auto_selected_pay_period("latest");  sheet_cache(list()) })
+
+  # Invalidate the sheet cache when the user edits the auto-tab reference
+  # month — the cached sheet objects are month-specific and stale after a
+  # change.
+  observeEvent(reference_manual_month(), {
+    sheet_cache(list())
+  }, ignoreInit = TRUE)
+
+  # Gate preview + download buttons on auto_tab_ready so users cannot click
+  # them during the startup DB probe (which on gov cloud can take several
+  # seconds). Once ready, they render as the live actionButton / downloadButton.
+  .disabled_btn <- function(id, label) {
+    actionButton(id, label, class = "govuk-button govuk-button--blue",
+                 disabled = "disabled",
+                 style = "opacity: 0.5; cursor: not-allowed;")
+  }
+  output$auto_preview_buttons <- renderUI({
+    if (!isTRUE(auto_tab_ready())) {
+      return(tagList(
+        .disabled_btn("preview_dashboard", "Dashboard"),
+        .disabled_btn("preview_topten",    "Top Ten"),
+        .disabled_btn("auto_preview_summary", "Summary"),
+        .disabled_btn("auto_preview_oecd", "OECD"),
+        p(class = "govuk-hint", style = "margin-top: 8px;",
+          "Preview will be available once database initialisation completes.")
+      ))
+    }
+    tagList(
+      actionButton("preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
+      actionButton("preview_topten",    "Top Ten",   class = "govuk-button govuk-button--blue"),
+      actionButton("auto_preview_summary", "Summary", class = "govuk-button govuk-button--blue"),
+      actionButton("auto_preview_oecd", "OECD",       class = "govuk-button govuk-button--blue")
+    )
+  })
+  output$auto_download_buttons <- renderUI({
+    if (!isTRUE(auto_tab_ready())) {
+      return(tagList(
+        .disabled_btn("download_word_stub",  "Download Word"),
+        .disabled_btn("download_excel_stub", "Download Excel")
+      ))
+    }
+    tagList(
+      downloadButton("download_word",  "Download Word",  class = "govuk-button govuk-button--blue"),
+      downloadButton("download_excel", "Download Excel", class = "govuk-button")
+    )
+  })
 
   .auto_selected_vac_label <- function() {
     labs <- period_labels()
@@ -1181,7 +1235,7 @@ server <- function(input, output, session) {
   
   # auto detect ref month + dropdownn
   session$onFlushed(function() {
-    
+
     showModal(modalDialog(
       div(
         div(class = "loader"),
@@ -1190,14 +1244,20 @@ server <- function(input, output, session) {
       ),
       footer = NULL, easyClose = FALSE
     ))
-    
+
+    # Outer tryCatch/finally guarantees the modal is dismissed and the
+    # auto_tab_ready flag is set, even if a DB probe raises unexpectedly.
+    # Without this, a slow or broken connection on gov cloud leaves the
+    # modal stuck and the Automatic tab looking frozen.
+    tryCatch({
+
     mm <- NULL
     
     # 1) try latest lfs period
     if (requireNamespace("DBI", quietly = TRUE) && requireNamespace("RPostgres", quietly = TRUE)) {
       conn <- NULL
       tryCatch({
-        conn <- DBI::dbConnect(RPostgres::Postgres())
+        conn <- pg_connect()
         res <- DBI::dbGetQuery(conn, 'SELECT DISTINCT time_period FROM "ons"."labour_market__age_group"')
         if (nrow(res) > 0) {
           ends <- as.Date(vapply(res$time_period, parse_lfs_end, as.Date(NA)), origin = "1970-01-01")
@@ -1241,7 +1301,7 @@ server <- function(input, output, session) {
     if (requireNamespace("DBI", quietly = TRUE) && requireNamespace("RPostgres", quietly = TRUE)) {
       conn <- NULL
       tryCatch({
-        conn <- DBI::dbConnect(RPostgres::Postgres())
+        conn <- pg_connect()
         res <- DBI::dbGetQuery(conn, 'SELECT DISTINCT time_period FROM "ons"."labour_market__vacancies_business"')
         if (nrow(res) > 0) {
           ends <- as.Date(vapply(res$time_period, parse_lfs_end, as.Date(NA)), origin = "1970-01-01")
@@ -1271,7 +1331,7 @@ server <- function(input, output, session) {
     if (requireNamespace("DBI", quietly = TRUE) && requireNamespace("RPostgres", quietly = TRUE)) {
       conn <- NULL
       tryCatch({
-        conn <- DBI::dbConnect(RPostgres::Postgres())
+        conn <- pg_connect()
         res <- DBI::dbGetQuery(conn, 'SELECT DISTINCT time_period FROM "ons"."labour_market__payrolled_employees"')
         if (nrow(res) > 0) {
           months <- suppressWarnings(as.Date(paste0("01 ", res$time_period), format = "%d %B %Y"))
@@ -1301,19 +1361,34 @@ server <- function(input, output, session) {
     ))
     
     # Period labels are stored in period_labels() reactive and rendered as toggle buttons
-    
-    removeModal()
+
+    }, error = function(e) {
+      auto_tab_error(e$message)
+    }, finally = {
+      removeModal()
+      auto_tab_ready(TRUE)
+    })
   }, once = TRUE)
   
   # reference month display (auto tab - editable text input)
   output$month_status <- renderUI({
     mm <- reference_manual_month()
     if (is.null(mm) || !nzchar(mm)) {
-      return(div(style = "margin-top: 10px;", div(class = "loader")))
+      return(div(style = "margin-top: 10px; display: flex; align-items: center; gap: 10px;",
+                 div(class = "loader"),
+                 span(style = "color: #505a5f;",
+                      "Fetching reference month from database…")))
     }
-    textInput("auto_ref_month_input", label = NULL,
-              value = manual_month_to_display(mm),
-              placeholder = "e.g. March 2026", width = "320px")
+    tagList(
+      textInput("auto_ref_month_input", label = NULL,
+                value = manual_month_to_display(mm),
+                placeholder = "e.g. March 2026", width = "320px"),
+      if (!is.null(auto_tab_error()))
+        div(class = "govuk-error-message",
+            style = "margin-top: 6px;",
+            paste0("Database probe failed: ", auto_tab_error(),
+                   ". Preview may show empty or stale data."))
+    )
   })
 
   # pre-populate manual tab month input when auto-detected
@@ -1354,50 +1429,64 @@ server <- function(input, output, session) {
   # preview: dashboard
   
   observeEvent(input$preview_dashboard, {
-    
+
+    if (!file.exists(calculations_path)) {
+      showNotification("Error: calculations.R not found", type = "error")
+      return()
+    }
+
+    # 13 sheet calcs + setup + finalise. incProgress() is called from inside
+    # calculations.R via .progress_cb so the user sees the actual sheet name
+    # each time instead of one undifferentiated "Running calculations" step.
+    .n_sheets <- 13
+    .step_size <- 0.9 / .n_sheets
+
     withProgress(message = "Loading Dashboard Data", value = 0, {
-      
-      incProgress(0.1, detail = "Step 1/6: Checking configuration files...")
-      Sys.sleep(0.3)
-      
-      if (!file.exists(calculations_path)) {
-        showNotification("Error: calculations.R not found", type = "error")
-        return()
-      }
-      
-      incProgress(0.15, detail = "Step 2/6: Loading configuration...")
-      Sys.sleep(0.2)
-      
+
+      incProgress(0.05, detail = "Loading configuration")
+
       calc_env <- new.env(parent = globalenv())
-      
+
       if (file.exists(config_path)) {
         source(config_path, local = calc_env)
       }
-      
-      incProgress(0.15, detail = "Step 3/6: Setting reference month...")
-      Sys.sleep(0.2)
-      
+
       mm <- reference_manual_month()
       if (!is.null(mm) && nzchar(mm)) {
         calc_env$manual_month <- tolower(mm)
       }
-      
-      # vacancies & payroll choices (use toggle buttons)
+
       calc_env$vacancies_mode <- auto_selected_vac_period()
-      calc_env$payroll_mode <- auto_selected_pay_period()
+      calc_env$payroll_mode   <- auto_selected_pay_period()
 
-      incProgress(0.2, detail = "Step 4/6: Running calculations...")
+      calc_env$.progress_cb <- function(sheet_name) {
+        incProgress(.step_size, detail = paste("Fetching", sheet_name))
+      }
+      calc_env$.sheet_cache <- sheet_cache()
 
+      calc_failed <- FALSE
       tryCatch({
         source(calculations_path, local = calc_env)
       }, error = function(e) {
-        showNotification(paste("Calculation error:", e$message), type = "error", duration = 5)
-        return()
+        calc_failed <<- TRUE
+        showNotification(paste("Calculation error:", e$message),
+                         type = "error", duration = 8)
       })
+      if (calc_failed) return()
 
-      incProgress(0.2, detail = "Step 5/6: Building metrics table...")
-      Sys.sleep(0.2)
-      
+      # Persist the freshly-fetched per-sheet results so repeat Preview clicks
+      # (same month + period selection) can skip the DB round-trip entirely.
+      .cache_keys <- c("lfs","vac","payroll","wages_nom","wages_cpi","days_lost",
+                       "redund","sectors","hr1","inact_reasons","workforce_jobs",
+                       "unemployment_by_age","payroll_by_age")
+      new_cache <- list()
+      for (k in .cache_keys) {
+        if (exists(k, envir = calc_env)) new_cache[[k]] <- get(k, envir = calc_env)
+      }
+      sheet_cache(new_cache)
+
+      incProgress(0.05, detail = "Building metrics table")
+
       gv <- function(name) {
         if (exists(name, envir = calc_env)) {
           val <- get(name, envir = calc_env)
@@ -1421,13 +1510,10 @@ server <- function(input, output, session) {
         list(name = "Wages CPI-adjusted (%)", cur = gv("latest_wages_cpi"), dq = gv("wages_cpi_change_q"), dy = gv("wages_cpi_change_y"), dc = gv("wages_cpi_change_covid"), de = gv("wages_cpi_change_election"), invert = FALSE, type = "wages")
       )
       
-      incProgress(0.2, detail = "Step 6/6: Finalizing dashboard...")
-      Sys.sleep(0.2)
-      
       dashboard_data(metrics)
     })
-    
-    showNotification("Dashboard loaded successfully!", type = "message", duration = 3)
+
+    showNotification("Dashboard ready", type = "message", duration = 3)
   })
   
   # preview: top ten
@@ -1565,7 +1651,7 @@ server <- function(input, output, session) {
       conn <- NULL
       unemp_data <- NULL; emp_data <- NULL; inact_data <- NULL
       tryCatch({
-        conn <- DBI::dbConnect(RPostgres::Postgres())
+        conn <- pg_connect()
 
         incProgress(0.2, detail = "Reading unemployment rate...")
         unemp_data <- .fetch_oecd_table(conn, "labour_statistics__unemployment_rate")

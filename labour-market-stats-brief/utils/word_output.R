@@ -216,7 +216,7 @@ sv <- function(name, default = NA_real_) {
   conn <- NULL
   result <- list(unemp = NULL, emp = NULL, inact = NULL)
   tryCatch({
-    conn <- DBI::dbConnect(RPostgres::Postgres())
+    conn <- pg_connect()
     result$unemp <- .query_table(conn, "labour_statistics__unemployment_rate")
     result$emp   <- .query_table(conn, "labour_statistics__employment_rate")
     result$inact <- .query_table(conn, "labour_statistics__inactivity_rate")

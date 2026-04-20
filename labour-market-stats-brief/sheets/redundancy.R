@@ -3,7 +3,7 @@
 REDUND_CODE <- "BEIR"
 
 fetch_redundancy <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, dataset_identifier_code, value
 FROM "ons"."labour_market__redundancies"')

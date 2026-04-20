@@ -8,7 +8,7 @@ SECTOR_CODES <- list(
 )
 
 fetch_sector_payroll <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, sic_section, value
 FROM "ons"."labour_market__employees_industry"')

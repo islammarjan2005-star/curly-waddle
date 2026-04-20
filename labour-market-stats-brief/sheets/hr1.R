@@ -4,7 +4,7 @@
 HR1_REGION <- "GB"
 
 fetch_hr1 <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, region, value
 FROM "ons"."labour_market__redundancies_region"')

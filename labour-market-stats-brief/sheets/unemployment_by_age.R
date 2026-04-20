@@ -10,7 +10,7 @@ suppressPackageStartupMessages({
 })
 
 fetch_unemployment_by_age <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     res <- DBI::dbGetQuery(conn, 'SELECT age_group, duration, value_type, dataset_identifier_code, time_period, value
 FROM "ons"."labour_market_unemployment"')

@@ -12,7 +12,7 @@ WAGES_NOM_CODES <- list(
 )
 
 fetch_wages_total <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, dataset_identifier_code, value
 FROM "ons"."labour_market__weekly_earnings_total"')
@@ -26,7 +26,7 @@ FROM "ons"."labour_market__weekly_earnings_total"')
 }
 
 fetch_wages_regular <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, dataset_identifier_code, value
 FROM "ons"."labour_market__weekly_earnings_regular"')

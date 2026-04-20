@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
 })
 
 fetch_workforce_jobs <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     res <- DBI::dbGetQuery(conn, 'SELECT industry, sic_section, time_period, value
 FROM "ons"."labour_market_workforce_jobs"')

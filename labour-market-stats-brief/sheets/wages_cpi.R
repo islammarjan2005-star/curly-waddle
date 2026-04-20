@@ -16,7 +16,7 @@ CPI_CHANGE <- list(
 )
 
 fetch_wages_cpi <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     result <- DBI::dbGetQuery(conn, 'SELECT time_period, earnings_metric, earnings_type, time_basis, value
 FROM "ons"."labour_market__weekly_earnings_cpi"')

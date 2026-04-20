@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
 })
 
 fetch_payroll_by_age <- function() {
-  conn <- DBI::dbConnect(RPostgres::Postgres())
+  conn <- pg_connect()
   tryCatch({
     res <- DBI::dbGetQuery(conn, 'SELECT age_group, time_period, value
 FROM "ons"."labour_market_employees_age"')

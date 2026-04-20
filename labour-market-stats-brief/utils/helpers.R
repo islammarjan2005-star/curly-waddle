@@ -11,10 +11,54 @@ suppressPackageStartupMessages({
 # month abbreviation -> number (used across several modules)
 month_map <- c(jan=1,feb=2,mar=3,apr=4,may=5,jun=6,jul=7,aug=8,sep=9,oct=10,nov=11,dec=12)
 
+# database connection
+#
+# reads DATABASE_DSN__datasets_1 (Data Workspace / gov cloud injects this at
+# runtime); falls back to DATABASE_URL, then to a bare Postgres() so local
+# development (libpq env vars / .Rprofile) keeps working unchanged. Accepts
+# both libpq keyword strings and postgresql:// URLs. A connect_timeout is set
+# so a broken DSN surfaces fast instead of hanging the Shiny UI.
+pg_connect <- function(timeout_s = 8) {
+  dsn <- Sys.getenv("DATABASE_DSN__datasets_1", unset = "")
+  if (!nzchar(dsn)) dsn <- Sys.getenv("DATABASE_URL", unset = "")
+
+  if (!nzchar(dsn)) {
+    return(DBI::dbConnect(RPostgres::Postgres(), connect_timeout = timeout_s))
+  }
+
+  if (grepl("^postgres(ql)?://", dsn)) {
+    m <- regmatches(dsn, regexec(
+      "^postgres(?:ql)?://(?:([^:@/]+)(?::([^@/]*))?@)?([^:/?#]+)(?::([0-9]+))?(?:/([^?#]*))?(?:\\?(.*))?$",
+      dsn))[[1]]
+    if (length(m) < 7) stop("pg_connect: malformed postgresql:// URL")
+    user <- m[2]; pw <- m[3]; host <- m[4]
+    port <- if (nzchar(m[5])) as.integer(m[5]) else 5432L
+    dbname <- m[6]
+    qry <- m[7]
+    sslmode <- "require"
+    if (nzchar(qry)) {
+      pairs <- strsplit(qry, "&", fixed = TRUE)[[1]]
+      kv <- do.call(rbind, strsplit(pairs, "=", fixed = TRUE))
+      if (!is.null(kv) && any(kv[,1] == "sslmode")) sslmode <- kv[kv[,1] == "sslmode", 2][1]
+    }
+    args <- list(RPostgres::Postgres(),
+                 host = host, port = port, dbname = dbname,
+                 sslmode = sslmode, connect_timeout = timeout_s)
+    if (nzchar(user)) args$user <- user
+    if (nzchar(pw))   args$password <- pw
+    return(do.call(DBI::dbConnect, args))
+  }
+
+  # libpq keyword=value connection string
+  DBI::dbConnect(RPostgres::Postgres(),
+                 .connection_string = dsn,
+                 connect_timeout = timeout_s)
+}
+
 # auto-detect manual_month from database (latest LFS period + 2 months)
 auto_detect_manual_month <- function() {
   tryCatch({
-    conn <- DBI::dbConnect(RPostgres::Postgres())
+    conn <- pg_connect()
     on.exit(try(DBI::dbDisconnect(conn), silent = TRUE))
 
     res <- DBI::dbGetQuery(conn, 'SELECT DISTINCT time_period FROM "ons"."labour_market__age_group"')
