@@ -463,9 +463,7 @@ ui <- fluidPage(
           '<div style=\"padding: 12px;\">' +
           '<div class=\"loader\"></div>' +
           '<strong>Loading dashboard\u2026</strong>' +
-          '<div style=\"margin-top: 8px; color: #505a5f;\">' +
-          'Fetching data from the database. This can take a few seconds on gov cloud.' +
-          '</div></div>'
+          '</div>'
         );
       });
     "))
@@ -1418,33 +1416,31 @@ server <- function(input, output, session) {
         return()
       }
 
-      calc_env <- new.env(parent = globalenv())
-
       if (file.exists(config_path)) {
-        source(config_path, local = calc_env)
+        source(config_path, local = FALSE)
       }
 
       mm <- reference_manual_month()
       if (!is.null(mm) && nzchar(mm)) {
-        calc_env$manual_month <- tolower(mm)
+        manual_month <<- tolower(mm)
       }
 
       # vacancies & payroll choices from toggle buttons
-      calc_env$vacancies_mode <- auto_selected_vac_period()
-      calc_env$payroll_mode <- auto_selected_pay_period()
+      vacancies_mode <<- auto_selected_vac_period()
+      payroll_mode   <<- auto_selected_pay_period()
 
       incProgress(0.4, detail = "calculating...")
 
       tryCatch({
-        source(calculations_path, local = calc_env)
+        source(calculations_path, local = FALSE)
       }, error = function(e) {
         showNotification(paste("Calculation error:", e$message), type = "error", duration = 5)
         return()
       })
-      
+
       gv <- function(name) {
-        if (exists(name, envir = calc_env)) {
-          val <- get(name, envir = calc_env)
+        if (exists(name, inherits = TRUE)) {
+          val <- tryCatch(get(name, inherits = TRUE), error = function(e) NULL)
           if (is.numeric(val)) return(val)
         }
         NA_real_
