@@ -104,5 +104,7 @@ compute_payroll <- function(pg_data, manual_mm, mode = c("latest", "aligned")) {
 }
 
 calculate_payroll <- function(manual_mm, mode = c("latest", "aligned")) {
-  compute_payroll(fetch_payroll(), manual_mm, mode = mode)
+  pg_data <- fetch_payroll()
+  assign("payroll_pg_data", pg_data, envir = globalenv())
+  compute_payroll(pg_data, manual_mm, mode = mode)
 }

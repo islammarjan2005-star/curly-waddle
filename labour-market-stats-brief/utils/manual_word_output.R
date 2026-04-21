@@ -153,6 +153,14 @@ generate_manual_word_output <- function(
   for (i in 1:10) doc <- replace_all(doc, sprintf("qvzsl%02d", i), summary[[paste0("line", i)]])
   for (i in 1:10) doc <- replace_all(doc, sprintf("qvztt%02d", i), top10[[paste0("line", i)]])
 
+  # user-selected notable-change lines (qvzsl11..qvzsl15), blank if unselected
+  notables_m <- sv("selected_notables", list())
+  if (!is.list(notables_m)) notables_m <- list()
+  for (i in 1:5) {
+    line <- if (length(notables_m) >= i) as.character(notables_m[[i]]) else ""
+    doc <- replace_all(doc, sprintf("qvzsl%02d", 10 + i), line)
+  }
+
   # current column
   doc <- replace_all(doc, "qvzempcur",  fmt_count_000s_current(sv("emp16_cur")))
   doc <- replace_all(doc, "qvzertcur",  .format_pct(sv("emp_rt_cur")))

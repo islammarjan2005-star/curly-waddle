@@ -113,5 +113,9 @@ compute_wages_nominal <- function(pg_total, pg_regular, manual_mm) {
 }
 
 calculate_wages_nominal <- function(manual_mm) {
-  compute_wages_nominal(fetch_wages_total(), fetch_wages_regular(), manual_mm)
+  pg_total   <- fetch_wages_total()
+  pg_regular <- fetch_wages_regular()
+  assign("wages_total_pg_data",   pg_total,   envir = globalenv())
+  assign("wages_regular_pg_data", pg_regular, envir = globalenv())
+  compute_wages_nominal(pg_total, pg_regular, manual_mm)
 }

@@ -546,6 +546,7 @@ ui <- fluidPage(
                                              actionButton("manual_preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
                                              actionButton("manual_preview_topten", "Top Ten", class = "govuk-button govuk-button--blue"),
                                              actionButton("manual_preview_summary", "Summary", class = "govuk-button govuk-button--blue"),
+                                             actionButton("manual_notable_changes", "Notable changes", class = "govuk-button govuk-button--blue"),
                                              actionButton("manual_preview_oecd", "OECD", class = "govuk-button govuk-button--blue"),
                                              
                                              tags$hr(class = "govuk-section-break"),
@@ -594,6 +595,7 @@ ui <- fluidPage(
                                              actionButton("preview_dashboard", "Dashboard", class = "govuk-button govuk-button--blue"),
                                              actionButton("preview_topten", "Top Ten", class = "govuk-button govuk-button--blue"),
                                              actionButton("auto_preview_summary", "Summary", class = "govuk-button govuk-button--blue"),
+                                             actionButton("auto_notable_changes", "Notable changes", class = "govuk-button govuk-button--blue"),
                                              actionButton("auto_preview_oecd", "OECD", class = "govuk-button govuk-button--blue"),
 
                                              tags$hr(class = "govuk-section-break"),
@@ -1556,6 +1558,76 @@ server <- function(input, output, session) {
     })
 
     showNotification("Summary generated (Database)", type = "message", duration = 3)
+  })
+
+  # notable changes: shared modal for both tabs
+  # stored as a plain global so the Word generators (sourced into globalenv)
+  # can see it via sv("selected_notables")
+
+  notable_candidates <- reactiveVal(NULL)
+
+  .open_notable_modal <- function() {
+    cands <- notable_candidates()
+    if (is.null(cands) || length(cands) == 0) {
+      showNotification("No notable changes found — run Preview Summary first so the history is loaded.",
+                       type = "warning", duration = 5)
+      return(invisible(NULL))
+    }
+    choices <- setNames(
+      as.character(seq_along(cands)),
+      vapply(cands, function(c) c$sentence, character(1))
+    )
+    showModal(modalDialog(
+      title = "Notable changes",
+      p(class = "govuk-hint",
+        "Ranked by how unusual each move is for its own series, with boosts for multi-year highs/lows, reversals, threshold crossings, and real-vs-nominal wage divergence. Pick up to 5 to add to the briefing (placeholders qvzsl11–qvzsl15)."),
+      checkboxGroupInput("notable_picks", label = NULL, choices = choices),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("notable_apply", "Apply", class = "govuk-button")
+      ),
+      size = "l", easyClose = TRUE
+    ))
+  }
+
+  .compute_notable <- function() {
+    tryCatch({
+      if (!exists("generate_notable_changes", inherits = TRUE)) {
+        source("sheets/notable_changes.R", local = FALSE)
+      }
+      generate_notable_changes()
+    }, error = function(e) {
+      showNotification(paste("Notable changes error:", e$message),
+                       type = "error", duration = 5)
+      list()
+    })
+  }
+
+  observeEvent(input$auto_notable_changes, {
+    notable_candidates(.compute_notable())
+    .open_notable_modal()
+  })
+
+  observeEvent(input$manual_notable_changes, {
+    notable_candidates(.compute_notable())
+    .open_notable_modal()
+  })
+
+  observeEvent(input$notable_apply, {
+    picks <- suppressWarnings(as.integer(input$notable_picks))
+    picks <- picks[!is.na(picks)]
+    picks <- head(picks, 5)
+    cands <- notable_candidates()
+    lines <- if (is.null(cands) || length(picks) == 0) {
+      list()
+    } else {
+      lapply(picks, function(i) cands[[i]]$sentence)
+    }
+    assign("selected_notables", lines, envir = globalenv())
+    removeModal()
+    showNotification(sprintf("%d notable line(s) ready for the next Word download.",
+                             length(lines)),
+                     type = "message", duration = 3)
   })
 
   # auto preview: oecd

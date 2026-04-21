@@ -43,5 +43,7 @@ compute_redundancy <- function(pg_data, manual_mm,
 }
 
 calculate_redundancy <- function(manual_mm) {
-  compute_redundancy(fetch_redundancy(), manual_mm)
+  pg_data <- fetch_redundancy()
+  assign("redund_pg_data", pg_data, envir = globalenv())
+  compute_redundancy(pg_data, manual_mm)
 }

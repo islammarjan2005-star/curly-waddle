@@ -49,6 +49,7 @@ compute_lfs_metric <- function(pg_data, manual_mm, code,
 
 calculate_lfs <- function(manual_mm) {
   pg_data <- fetch_lfs()
+  assign("lfs_pg_data", pg_data, envir = globalenv())
   list(
     emp16        = compute_lfs_metric(pg_data, manual_mm, LFS_CODES$EMP16),
     emp_rt       = compute_lfs_metric(pg_data, manual_mm, LFS_CODES$EMP_RT),

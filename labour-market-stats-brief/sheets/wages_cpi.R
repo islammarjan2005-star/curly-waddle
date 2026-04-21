@@ -124,5 +124,7 @@ compute_wages_cpi <- function(pg_data, manual_mm) {
 }
 
 calculate_wages_cpi <- function(manual_mm) {
-  compute_wages_cpi(fetch_wages_cpi(), manual_mm)
+  pg_data <- fetch_wages_cpi()
+  assign("wages_cpi_pg_data", pg_data, envir = globalenv())
+  compute_wages_cpi(pg_data, manual_mm)
 }

@@ -57,5 +57,7 @@ compute_hr1 <- function(pg_data) {
 }
 
 calculate_hr1 <- function() {
-  compute_hr1(fetch_hr1())
+  pg_data <- fetch_hr1()
+  assign("hr1_pg_data", pg_data, envir = globalenv())
+  compute_hr1(pg_data)
 }

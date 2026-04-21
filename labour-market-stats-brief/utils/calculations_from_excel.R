@@ -126,6 +126,31 @@ run_calculations_from_excel <- function(manual_month = NULL,
     assign(paste0(prefix, "_dc"),  m$dc,  envir = target_env)
     assign(paste0(prefix, "_de"),  m$de,  envir = target_env)
   }
+
+  # full history series for notable-changes scorer (rate series only for v1)
+  .build_lfs_series <- function(tbl, col) {
+    if (nrow(tbl) == 0 || ncol(tbl) < col) return(NULL)
+    labels <- trimws(as.character(tbl[[1]]))
+    lfs_pat <- "^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}$"
+    hits <- grep(lfs_pat, labels, ignore.case = TRUE)
+    if (length(hits) < 6) return(NULL)
+    dates <- vapply(labels[hits], function(l) {
+      mons <- regmatches(l, gregexpr("[A-Za-z]{3}", l))[[1]]
+      yrs  <- regmatches(l, gregexpr("[0-9]{4}", l))[[1]]
+      end_m <- month_map[tolower(mons[2])]
+      yr <- suppressWarnings(as.integer(yrs[1]))
+      if (is.na(end_m) || is.na(yr)) return(as.numeric(NA))
+      as.numeric(as.Date(sprintf("%04d-%02d-01", yr, end_m)))
+    }, numeric(1))
+    vals <- suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(tbl[[col]][hits]))))
+    ok <- !is.na(dates) & !is.na(vals)
+    if (sum(ok) < 6) return(NULL)
+    df <- data.frame(date = as.Date(dates[ok], origin = "1970-01-01"), value = vals[ok])
+    df[order(df$date), ]
+  }
+  assign("emp_rt_manual_series",   .build_lfs_series(tbl_1, 17), envir = target_env)
+  assign("unemp_rt_manual_series", .build_lfs_series(tbl_1, 9),  envir = target_env)
+  assign("inact_rt_manual_series", .build_lfs_series(tbl_1, 19), envir = target_env)
   
   # a01 sheet 2: col BD(56)=inact 50-64 level, col BE(57)=inact 50-64 rate
   tbl_2 <- if (!is.null(file_a01)) .read_sheet(file_a01, "2") else data.frame()
@@ -153,6 +178,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   assign("redund_dy",  m_redund$dy,  envir = target_env)
   assign("redund_dc",  m_redund$dc,  envir = target_env)
   assign("redund_de",  m_redund$de,  envir = target_env)
+  assign("redund_manual_series", .build_lfs_series(tbl_10, 3), envir = target_env)
   
   
   # a01 sheet 13: awe total pay - col B(2)=weekly gbp, col D(4)=3m avg % yoy
@@ -184,6 +210,12 @@ run_calculations_from_excel <- function(manual_month = NULL,
     
     prev_q_pct <- .val_by_date(w13_dates, w13_pct, anchor_m %m-% months(3))
     wages_total_qchange <- if (!is.na(latest_wages) && !is.na(prev_q_pct)) latest_wages - prev_q_pct else NA_real_
+
+    .w13_ok <- !is.na(w13_dates) & !is.na(w13_pct)
+    if (sum(.w13_ok) >= 6) {
+      .w13_df <- data.frame(date = as.Date(w13_dates[.w13_ok]), value = w13_pct[.w13_ok])
+      assign("wages_nom_manual_series", .w13_df[order(.w13_df$date), ], envir = target_env)
+    }
   } else {
     latest_wages <- wages_change_q <- wages_change_y <- NA_real_
     wages_change_covid <- wages_change_election <- wages_total_qchange <- NA_real_
@@ -291,6 +323,12 @@ run_calculations_from_excel <- function(manual_month = NULL,
     wages_cpi_total_vs_pandemic <- if (!is.na(cur_cpi_real) && !is.na(pandemic_avg) && pandemic_avg != 0) {
       ((cur_cpi_real - pandemic_avg) / pandemic_avg) * 100
     } else NA_real_
+
+    .cpi_ok <- !is.na(cpi_months) & !is.na(cpi_total)
+    if (sum(.cpi_ok) >= 6) {
+      .cpi_df <- data.frame(date = as.Date(cpi_months[.cpi_ok]), value = cpi_total[.cpi_ok])
+      assign("wages_cpi_manual_series", .cpi_df[order(.cpi_df$date), ], envir = target_env)
+    }
   } else {
     latest_wages_cpi <- latest_regular_cpi <- NA_real_
     wages_cpi_change_q <- wages_cpi_change_y <- wages_cpi_change_covid <- wages_cpi_change_election <- NA_real_
@@ -364,6 +402,7 @@ run_calculations_from_excel <- function(manual_month = NULL,
   assign("vac_de",  vac_de,  envir = target_env)
   assign("vac", list(cur = vac_cur, dq = vac_dq, dy = vac_dy,
                      dc = vac_dc, de = vac_de, end = vac_end), envir = target_env)
+  assign("vacancies_manual_series", .build_lfs_series(tbl_19, 3), envir = target_env)
   
   # a01 sheet 18: days lost
   tbl_18 <- if (!is.null(file_a01)) .read_sheet(file_a01, "18") else data.frame()
@@ -458,6 +497,10 @@ run_calculations_from_excel <- function(manual_month = NULL,
   assign("payroll_flash_dm",  payroll_flash_dm,  envir = target_env)
   assign("payroll_flash_dy",  payroll_flash_dy,  envir = target_env)
   assign("payroll_flash_de",  payroll_flash_de,  envir = target_env)
+  if (exists("pay_df") && is.data.frame(pay_df) && nrow(pay_df) >= 6) {
+    .pay_series <- data.frame(date = as.Date(pay_df$m), value = pay_df$v / 1000)
+    assign("payroll_manual_series", .pay_series[order(.pay_series$date), ], envir = target_env)
+  }
   
   
   

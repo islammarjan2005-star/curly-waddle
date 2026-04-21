@@ -87,5 +87,7 @@ compute_vacancies <- function(pg_data, manual_mm,
 }
 
 calculate_vacancies <- function(manual_mm, mode = c("latest", "aligned")) {
-  compute_vacancies(fetch_vacancies(), manual_mm, mode = mode)
+  pg_data <- fetch_vacancies()
+  assign("vacancies_pg_data", pg_data, envir = globalenv())
+  compute_vacancies(pg_data, manual_mm, mode = mode)
 }
